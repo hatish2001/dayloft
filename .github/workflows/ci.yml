@@ -1,0 +1,37 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Install pinned dependencies
+        run: bundle exec pod install --project-directory=SelfControl
+      - name: Original contracts and new native tests
+        run: ./scripts/test.sh
+      - name: Verify signed update rejection
+        run: ./scripts/test-update-signing.sh
+      - name: Check public source hygiene
+        run: python3 scripts/audit-source.py
+      - name: Keep test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            artifacts/tests.log
+            artifacts/DerivedData/Logs/Test/*.xcresult
+          retention-days: 7

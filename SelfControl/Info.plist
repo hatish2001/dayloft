@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleDisplayName</key>
+	<string>Dayloft</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>selfcontrol</string>
+			</array>
+			<key>CFBundleTypeIconFile</key>
+			<string>SelfControlBlocklist.icns</string>
+			<key>CFBundleTypeName</key>
+			<string>SelfControl Blocklist</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSTypeIsPackage</key>
+			<false/>
+			<key>NSPersistentStoreTypeKey</key>
+			<string>Binary</string>
+		</dict>
+	</array>
+	<key>CFBundleExecutable</key>
+	<string>${EXECUTABLE_NAME}</string>
+	<key>CFBundleIconFile</key>
+	<string>DayloftIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Dayloft</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>4.2.0</string>
+	<key>CFBundleVersion</key>
+	<string>420</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
+	<key>LSMinimumSystemVersion</key>
+	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSAppleScriptEnabled</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Free and open-source under the GPL.</string>
+	<key>NSMainNibFile</key>
+	<string>MainMenu</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>SMPrivilegedExecutables</key>
+	<dict>
+		<key>org.dayloft.focusd</key>
+		<string>anchor apple generic and identifier &quot;org.dayloft.focusd&quot; and certificate leaf[subject.OU] = $(DEVELOPMENT_TEAM)</string>
+	</dict>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUEnableJavaScript</key>
+	<true/>
+	<!-- Dayloft builds are distributed separately from upstream SelfControl. -->
+	<key>SUPublicDSAKeyFile</key>
+	<string>dsa_pub.pem</string>
+	<key>SUEnableSystemProfiling</key>
+	<true/>
+	<key>SUSendProfileInfo</key>
+	<true/>
+    <key>SUFeedURL</key><string>https://github.com/hatish2001/dayloft/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>$(DAYLOFT_UPDATE_PUBLIC_KEY)</string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUAutomaticallyUpdate</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUSendProfileInfo</key><false/>
+</dict>
+</plist>

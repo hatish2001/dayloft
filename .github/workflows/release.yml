@@ -1,0 +1,64 @@
+name: Prepare notarized release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    # Configure this environment with required reviewers before enabling public releases.
+    environment: release
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - run: bundle exec pod install --project-directory=SelfControl
+      - run: ./scripts/test.sh
+      - name: Verify signed update rejection
+        run: ./scripts/test-update-signing.sh
+      - run: python3 scripts/audit-source.py
+      - name: Import release credentials into the temporary runner
+        env:
+          DAYLOFT_CERTIFICATE_BASE64: ${{ secrets.DAYLOFT_CERTIFICATE_BASE64 }}
+          DAYLOFT_CERTIFICATE_PASSWORD: ${{ secrets.DAYLOFT_CERTIFICATE_PASSWORD }}
+          DAYLOFT_TEAM_ID: ${{ secrets.DAYLOFT_TEAM_ID }}
+          DAYLOFT_NOTARY_APPLE_ID: ${{ secrets.DAYLOFT_NOTARY_APPLE_ID }}
+          DAYLOFT_NOTARY_PASSWORD: ${{ secrets.DAYLOFT_NOTARY_PASSWORD }}
+        run: ./scripts/ci-import-signing.sh
+      - name: Sign, notarize, and package
+        env:
+          DAYLOFT_TEAM_ID: ${{ secrets.DAYLOFT_TEAM_ID }}
+          DAYLOFT_SIGN_IDENTITY: ${{ secrets.DAYLOFT_SIGN_IDENTITY }}
+          DAYLOFT_NOTARY_PROFILE: dayloft-ci
+          DAYLOFT_UPDATE_PUBLIC_KEY: ${{ vars.DAYLOFT_UPDATE_PUBLIC_KEY }}
+          DAYLOFT_UPDATE_PRIVATE_KEY: ${{ secrets.DAYLOFT_UPDATE_PRIVATE_KEY }}
+        run: |
+          umask 077
+          export DAYLOFT_UPDATE_PRIVATE_KEY_FILE="$RUNNER_TEMP/dayloft-update.key"
+          trap 'rm -f "$DAYLOFT_UPDATE_PRIVATE_KEY_FILE"' EXIT
+          printf '%s' "$DAYLOFT_UPDATE_PRIVATE_KEY" > "$DAYLOFT_UPDATE_PRIVATE_KEY_FILE"
+          unset DAYLOFT_UPDATE_PRIVATE_KEY
+          ./scripts/release.sh
+      - name: Create release draft with the installer and update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' SelfControl/Info.plist)"
+          gh release create "v$version" --draft --target "$GITHUB_SHA" \
+            --title "Dayloft $version" --generate-notes \
+            "dist/Dayloft-$version.dmg" "dist/Dayloft-$version-source.tar.gz" \
+            dist/appcast.xml dist/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notarized-release
+          path: dist/*
+          if-no-files-found: error
+      - name: Remove temporary signing keychain
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/dayloft-signing.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/dayloft-signing.keychain-db"
+          fi

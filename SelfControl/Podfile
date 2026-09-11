@@ -1,0 +1,78 @@
+source 'https://cdn.cocoapods.org/'
+
+minVersion = '13.0'
+
+platform :osx, minVersion
+
+# cocoapods-prune-localizations doesn't appear to auto-detect pods properly, so using a manual list
+supported_locales = ['Base', 'da', 'de', 'en', 'es', 'fr', 'it', 'ja', 'ko', 'nl', 'pt-BR', 'sv', 'tr', 'zh-Hans']
+plugin 'cocoapods-prune-localizations', { :localizations => supported_locales }
+
+target "SelfControl" do
+    use_frameworks! :linkage => :static
+    pod 'MASPreferences', '~> 1.1.4'
+    pod 'TransformerKit', '~> 1.1.1'
+    pod 'FormatterKit/TimeIntervalFormatter', '~> 1.8.0'
+    pod 'LetsMove', '~> 1.24'
+    pod 'Sparkle', '2.9.6'
+    
+    # Add test target
+    target 'SelfControlTests' do
+        inherit! :complete
+    end
+end
+
+
+# The engine executables only use system frameworks.
+target "SCKillerHelper" do
+end
+target "selfcontrol-cli" do
+end
+target "org.eyebeam.selfcontrold" do
+end
+
+post_install do |pi|
+   pi.pods_project.targets.each do |t|
+       t.build_configurations.each do |bc|
+           if Gem::Version.new(bc.build_settings['MACOSX_DEPLOYMENT_TARGET']) < Gem::Version.new(minVersion)
+#            if bc.build_settings['MACOSX_DEPLOYMENT_TARGET'] == '8.0'
+               bc.build_settings['MACOSX_DEPLOYMENT_TARGET'] = minVersion
+           end
+       end
+   end
+
+   # TransformerKit predates the Darwin module
+   # layout in current Xcode. Keep their source compatible each time Pods are
+   # generated, without changing the pinned dependency versions.
+   compatibility_rewrites = {
+       'Pods/TransformerKit/Sources/TTTDateTransformers.m' => [
+           ['@import Darwin.C.time;\n@import Darwin.C.xlocale;', '#include <time.h>\n#include <locale.h>'],
+           ['strptime_l(destination, "%FT%T%z", &time, NULL);', 'strptime(destination, "%FT%T%z", &time);'],
+           ['strptime_l(source, format, &time, NULL);', 'strptime(source, format, &time);']
+       ],
+       'Pods/TransformerKit/Sources/NSValueTransformerName.h' => [
+           ['@import Darwin.Availability;', '#import <Availability.h>']
+       ],
+       'Pods/TransformerKit/Sources/NSValueTransformer+TransformerKit.m' => [
+           ['@import Darwin.Availability;', '#import <Availability.h>']
+       ],
+       'Pods/Target Support Files/Pods-SelfControl/Pods-SelfControl-resources.sh' => [
+           ['MASPreferences.framework/en.lproj/MASPreferencesWindow.nib', 'MASPreferences.framework/Resources/en.lproj/MASPreferencesWindow.nib']
+       ],
+       'Pods/Target Support Files/Pods-SelfControl-SelfControlTests/Pods-SelfControl-SelfControlTests-resources.sh' => [
+           ['MASPreferences.framework/en.lproj/MASPreferencesWindow.nib', 'MASPreferences.framework/Resources/en.lproj/MASPreferencesWindow.nib']
+       ]
+   }
+
+   compatibility_rewrites.each do |relative_path, rewrites|
+       path = File.join(__dir__, relative_path)
+       next unless File.file?(path)
+
+       contents = File.read(path)
+       rewrites.each { |from, to| contents = contents.gsub(from.gsub('\n', "\n"), to.gsub('\n', "\n")) }
+       next if contents == File.read(path)
+
+       File.chmod(File.stat(path).mode | 0o200, path)
+       File.write(path, contents)
+   end
+end

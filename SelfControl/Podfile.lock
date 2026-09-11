@@ -1,0 +1,54 @@
+PODS:
+  - FormatterKit/Resources (1.8.2)
+  - FormatterKit/TimeIntervalFormatter (1.8.2):
+    - FormatterKit/Resources
+  - LetsMove (1.25)
+  - MASPreferences (1.1.4)
+  - Sparkle (2.9.6)
+  - TransformerKit (1.1.1):
+    - TransformerKit/Core (= 1.1.1)
+    - TransformerKit/Cryptography (= 1.1.1)
+    - TransformerKit/Data (= 1.1.1)
+    - TransformerKit/Date (= 1.1.1)
+    - TransformerKit/Image (= 1.1.1)
+    - TransformerKit/JSON (= 1.1.1)
+    - TransformerKit/String (= 1.1.1)
+  - TransformerKit/Core (1.1.1)
+  - TransformerKit/Cryptography (1.1.1):
+    - TransformerKit/Core
+  - TransformerKit/Data (1.1.1):
+    - TransformerKit/Core
+  - TransformerKit/Date (1.1.1):
+    - TransformerKit/Core
+  - TransformerKit/Image (1.1.1):
+    - TransformerKit/Core
+  - TransformerKit/JSON (1.1.1):
+    - TransformerKit/Core
+  - TransformerKit/String (1.1.1):
+    - TransformerKit/Core
+
+DEPENDENCIES:
+  - FormatterKit/TimeIntervalFormatter (~> 1.8.0)
+  - LetsMove (~> 1.24)
+  - MASPreferences (~> 1.1.4)
+  - Sparkle (= 2.9.6)
+  - TransformerKit (~> 1.1.1)
+
+SPEC REPOS:
+  trunk:
+    - FormatterKit
+    - LetsMove
+    - MASPreferences
+    - Sparkle
+    - TransformerKit
+
+SPEC CHECKSUMS:
+  FormatterKit: 4b8f29acc9b872d5d12a63efb560661e8f2e1b98
+  LetsMove: 7b9fe44737707d984fbd3f47af46609a9a07b461
+  MASPreferences: 7bdcfe891d7840453cf48f95fa866c3e152ace7a
+  Sparkle: b8c9cf4ced217ffc708a1ca5f988a7ba877658db
+  TransformerKit: 1295d491e9999960afdedcb0a163489827efd169
+
+PODFILE CHECKSUM: 7d26255e7fff80b13dc79288b11f3322f2e73241
+
+COCOAPODS: 1.16.2
