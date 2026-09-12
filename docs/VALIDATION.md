@@ -53,3 +53,5 @@ The 4.2.0 local Apple Development-signed app builds and launches. The sidebar ta
 ## Final code and pipeline review (4.2.1)
 
 See [the release review](RELEASE_REVIEW.md) for findings, fixes, and remaining launch checks. The new lifecycle suite links an inert daemon double and intercepts network-rule operations, persistence, cache clearing, and notifications; tests never start the real daemon. All 51 local tests and the universal Release build pass.
+
+The [final public pipeline run](https://github.com/hatish2001/dayloft/actions/runs/34670926296) passed the 51 tests, universal Release build, version agreement, signed-update rejection, and source audit with the current Node 24 actions. A local Apple Development-signed 4.2.1 app also passes bundle/signature verification. No new live blocking or public notarization result is claimed.
