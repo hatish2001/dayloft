@@ -64,4 +64,8 @@ Schedules refresh from the helper alongside Home, display the same session/break
 
 X/Twitter and TikTok entries include their parent domains and known aliases; allowlists and unrelated DNS suffixes are not broadened. Adding sites during a break saves additions for normal resume and preserves existing entries without reinstalling rules early. These paths are covered by isolated tests; adding the sites to the user's live block and checking live enforcement remain pending authorization.
 
-All 60 tests, original-test checksum, version agreement, source audit, signed app build, and update-signature rejection checks pass locally. Live UI and helper-upgrade verification are tracked separately from these results.
+All 61 tests, original-test checksum, version agreement, source audit, signed app build, and update-signature rejection checks pass locally. Live UI and helper-upgrade verification are tracked separately from these results.
+
+## Website persistence repair (4.2.3)
+
+Adding a distraction during focus now saves it in three durable places: the live block, the selected mode for future manual sessions, and every future denylist schedule. Allowlist schedules remain unchanged because adding a blocked site would weaken them. The helper merges the active set without removing schedule-specific sites, including when a break is active, and rolls back both saved lists if the break-path settings write fails. A regression test confirms additions survive into future denylist schedules while allowlist schedules and the active break remain intact.

@@ -23,6 +23,29 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     return [SCRecurringSchedule hasEnabledSchedules:[[SCSettings sharedSettings] valueForKey:@"DayloftRecurringSchedules"]];
 }
 
++ (NSArray<NSDictionary*>*)recurringSchedules:(NSArray<NSDictionary*>*)schedules byAddingBlockedSites:(NSArray<NSString*>*)sites {
+    if (sites.count == 0 || schedules.count == 0) return schedules ?: @[];
+    NSMutableArray<NSDictionary*>* updated = [NSMutableArray arrayWithCapacity:schedules.count];
+    for (NSDictionary* original in schedules) {
+        // An allowlist has the opposite meaning. Adding distractions to it
+        // would weaken that schedule, so leave it exactly as the user set it.
+        if ([original[@"allowlist"] boolValue]) {
+            [updated addObject:original];
+            continue;
+        }
+        NSMutableOrderedSet* domains = [NSMutableOrderedSet orderedSetWithArray:original[@"domains"] ?: @[]];
+        [domains addObjectsFromArray:sites];
+        if ([domains.array isEqualToArray:original[@"domains"] ?: @[]]) {
+            [updated addObject:original];
+            continue;
+        }
+        NSMutableDictionary* schedule = [original mutableCopy];
+        schedule[@"domains"] = domains.array;
+        [updated addObject:schedule];
+    }
+    return updated;
+}
+
 + (void)setRecurringSchedules:(NSArray<NSDictionary*>*)schedules controllingUID:(uid_t)controllingUID blockSettings:(NSDictionary*)blockSettings authorization:(NSData*)authData reply:(void(^)(NSError* error))reply {
     if (![self lockOrTimeout:reply]) return;
     if ([SCBlockUtilities anyBlockIsRunning]) {
@@ -343,10 +366,14 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         // for the normal resume path without restoring rules ahead of time.
         NSMutableOrderedSet* combined = [NSMutableOrderedSet orderedSetWithArray:activeBlocklist];
         [combined addObjectsFromArray:added];
+        NSArray* previousSchedules = [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[];
+        NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:combined.array];
         [settings setValue:combined.array forKey:@"ActiveBlocklist"];
+        if (![updatedSchedules isEqualToArray:previousSchedules]) [settings setValue:updatedSchedules forKey:@"DayloftRecurringSchedules"];
         NSError* error = [settings syncSettingsAndWait:5];
         if (error) {
             [settings setValue:activeBlocklist forKey:@"ActiveBlocklist"];
+            [settings setValue:previousSchedules forKey:@"DayloftRecurringSchedules"];
             [settings syncSettingsAndWait:5];
         }
         [SCHelperToolUtilities sendConfigurationChangedNotification];
@@ -374,7 +401,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     // in persisted state so recovery/restart cannot accidentally unblock them.
     NSMutableOrderedSet* effectiveList = [NSMutableOrderedSet orderedSetWithArray:activeBlocklist];
     [effectiveList addObjectsFromArray:added];
+    NSArray* previousSchedules = [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[];
+    NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:effectiveList.array];
     [settings setValue:effectiveList.array forKey:@"ActiveBlocklist"];
+    if (![updatedSchedules isEqualToArray:previousSchedules]) [settings setValue:updatedSchedules forKey:@"DayloftRecurringSchedules"];
     
     // make sure everyone knows about our new list
     NSError* syncErr = [settings syncSettingsAndWait: 5];

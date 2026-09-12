@@ -66,9 +66,26 @@
     }];
 }
 - (void)addBlockedWebsites:(NSString*)text completion:(void(^)(NSError* _Nullable))completion {
+    NSArray<NSString*>* additions = [self cleanDomains:text];
     NSMutableOrderedSet* domains = [NSMutableOrderedSet orderedSetWithArray:[SCSettings.sharedSettings valueForKey:@"ActiveBlocklist"] ?: @[]];
-    [domains addObjectsFromArray:[self cleanDomains:text]];
-    [self.client updateBlocklist:domains.array reply:^(NSError* error) { dispatch_async(dispatch_get_main_queue(), ^{ completion(error); }); }];
+    [domains addObjectsFromArray:additions];
+    [self.client updateBlocklist:domains.array reply:^(NSError* error) {
+        if (!error) {
+            // Adding a distraction while focused means it should be there next
+            // time too. The daemon mirrors it to future denylist schedules.
+            NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+            NSMutableOrderedSet* saved = [NSMutableOrderedSet orderedSetWithArray:[defaults arrayForKey:@"Blocklist"] ?: @[]];
+            [saved addObjectsFromArray:additions];
+            [defaults setObject:saved.array forKey:@"Blocklist"];
+            NSString* mode = [defaults stringForKey:@"DayloftMode"] ?: @"Living";
+            NSMutableDictionary* modeSettings = [[defaults dictionaryForKey:[@"DayloftMode." stringByAppendingString:mode]] mutableCopy] ?: [NSMutableDictionary new];
+            modeSettings[@"domains"] = saved.array;
+            modeSettings[@"allowlist"] = @NO;
+            [defaults setObject:modeSettings forKey:[@"DayloftMode." stringByAppendingString:mode]];
+            [defaults synchronize];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+    }];
 }
 - (void)showAdvancedSettings { [self.controller openPreferences:self]; }
 - (void)showActiveBlockTools { [self.controller showTimerWindow]; }

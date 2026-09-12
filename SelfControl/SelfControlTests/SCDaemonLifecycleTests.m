@@ -52,6 +52,9 @@ static BOOL failScheduledStart;
     [self replaceMethod:class_getClassMethod(SCBlockUtilities.class, @selector(legacyBlockIsRunning)) withBlock:^BOOL(id object) { return NO; }];
     [self replaceMethod:class_getClassMethod(SCMigrationUtilities.class, @selector(legacySettingsFoundForUser:)) withBlock:^BOOL(id object, uid_t uid) { return NO; }];
     [self replaceMethod:class_getInstanceMethod(BlockManager.class, @selector(clearBlock)) withBlock:^BOOL(id object) { self.clearCalls++; return self.clearSucceeds; }];
+    [self replaceMethod:class_getInstanceMethod(BlockManager.class, @selector(enterAppendMode)) withBlock:^BOOL(id object) { return YES; }];
+    [self replaceMethod:class_getInstanceMethod(BlockManager.class, @selector(addBlockEntriesFromStrings:)) withBlock:^(id object, NSArray* sites) {}];
+    [self replaceMethod:class_getInstanceMethod(BlockManager.class, @selector(finishAppending)) withBlock:^BOOL(id object) { return YES; }];
     [self replaceMethod:class_getInstanceMethod(SCSettings.class, @selector(syncSettingsAndWait:)) withBlock:^NSError*(id object, NSInteger timeout) { return self.persistenceError; }];
     for (NSString* selector in @[@"clearCachesIfRequested", @"sendConfigurationChangedNotification", @"playBlockEndSound"]) {
         [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, NSSelectorFromString(selector)) withBlock:^(id object) {}];
@@ -150,6 +153,9 @@ static BOOL failScheduledStart;
 - (void)testAddingSitesDuringBreakPreservesExistingListAndBreak {
     [self makeActiveSession];
     SCSettings* s = SCSettings.sharedSettings;
+    NSDictionary* denylistSchedule = @{@"id": @"future", @"enabled": @YES, @"domains": @[@"youtube.com"], @"allowlist": @NO};
+    NSDictionary* allowlistSchedule = @{@"id": @"protected", @"enabled": @YES, @"domains": @[@"dayloft.app"], @"allowlist": @YES};
+    [s setValue:@[denylistSchedule, allowlistSchedule] forKey:@"DayloftRecurringSchedules"];
     NSDate* breakEnd = [NSDate dateWithTimeIntervalSinceNow:300];
     [s setValue:@YES forKey:@"BlockPausedForBreak"];
     [s setValue:breakEnd forKey:@"BreakEndDate"];
@@ -157,9 +163,23 @@ static BOOL failScheduledStart;
     [SCDaemonBlockMethods updateBlocklist:@[@"x.com", @"tiktok.com"] authorization:[NSData data] reply:^(NSError* error) { replies++; XCTAssertNil(error); }];
     XCTAssertEqual(replies, 1u);
     XCTAssertEqualObjects([s valueForKey:@"ActiveBlocklist"], (@[@"example.org", @"x.com", @"tiktok.com"]));
+    NSArray* schedules = [s valueForKey:@"DayloftRecurringSchedules"];
+    XCTAssertEqualObjects(schedules[0][@"domains"], (@[@"youtube.com", @"example.org", @"x.com", @"tiktok.com"]));
+    XCTAssertEqualObjects(schedules[1][@"domains"], (@[@"dayloft.app"]));
     XCTAssertTrue([s boolForKey:@"BlockPausedForBreak"]);
     XCTAssertEqualObjects([s valueForKey:@"BreakEndDate"], breakEnd);
     XCTAssertEqual(self.clearCalls, 0u);
+}
+- (void)testAddingSitesPersistsThemForFutureDenylistSchedules {
+    [self makeActiveSession];
+    SCSettings* s = SCSettings.sharedSettings;
+    NSDictionary* schedule = @{@"id": @"future", @"enabled": @YES, @"domains": @[@"youtube.com"], @"allowlist": @NO};
+    [s setValue:@[schedule] forKey:@"DayloftRecurringSchedules"];
+    __block NSUInteger replies = 0;
+    [SCDaemonBlockMethods updateBlocklist:@[@"x.com", @"tiktok.com"] authorization:NSData.data reply:^(NSError* error) { replies++; XCTAssertNil(error); }];
+    XCTAssertEqual(replies, 1u);
+    XCTAssertEqualObjects([s valueForKey:@"ActiveBlocklist"], (@[@"example.org", @"x.com", @"tiktok.com"]));
+    XCTAssertEqualObjects([s valueForKey:@"DayloftRecurringSchedules"][0][@"domains"], (@[@"youtube.com", @"example.org", @"x.com", @"tiktok.com"]));
 }
 - (void)testFailedExtensionPersistenceRestoresOriginalEnd {
     [self makeActiveSession];
