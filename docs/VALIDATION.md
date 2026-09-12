@@ -4,11 +4,11 @@ Validated locally on Apple silicon with macOS 26 and Xcode 26.6 in September 202
 
 ## Automated checks
 
-- 43 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, and 13 website-rule/enforcement-result tests, and 3 update-policy tests.
+- 43 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, 13 website-rule/enforcement-result tests, and 3 update-policy tests.
 - The original test file matches its recorded SHA-256 checksum.
 - A fresh public-source copy with newly installed, pinned CocoaPods dependencies builds and passes tests.
 - Both unsigned test bundles and the locally Apple Development-signed app pass resource and embedded-helper identity checks.
-- GitHub Actions workflow syntax passes actionlint. The workflows have not yet run on a public remote.
+- GitHub Actions workflow syntax passes actionlint. The [first public CI run](https://github.com/hatish2001/dayloft/actions/runs/34645315052) passed dependency installation, the test suite, signed-update rejection checks, and the source audit for commit `d3c9710`.
 - The public file-set audit excludes generated builds, nested Git metadata, local user state, and signing material; it checks credential patterns and required license/build files.
 
 ## Manual checks performed
@@ -22,7 +22,7 @@ During validation, the inherited settings broadcaster let a test process affect 
 
 - A complete break/resume cycle, natural session expiry, reboot, sleep/wake, and app-closed recurring starts on a dedicated test Mac.
 - Intel hardware behavior. The universal Release build passes locally, with both architectures verified in all nine Mach-O binaries.
-- Developer ID signing, Apple notarization, Gatekeeper installation on a clean Mac, and an actual public GitHub release run. GitHub CI status is reported below.
+- Developer ID signing, Apple notarization, Gatekeeper installation on a clean Mac, and an actual public GitHub release run. Public build/test CI passed as recorded above.
 
 The provided app is a local development build. Follow [the release checklist](RELEASING.md) before distributing a public installer. The updated helper is installed through the app's normal macOS authorization flow on the next block or enabled schedule.
 
