@@ -271,9 +271,9 @@
     self.addingBlock = YES;
     [self refreshUserInterface];
 
-    // Install first so the privileged daemon owns this persistent schedule and
+    // Ensure the privileged daemon owns this persistent schedule and
     // can start it after the graphical app has been quit.
-    [self.xpc installDaemon:^(NSError *error) {
+    [self.xpc ensureDaemonInstalled:^(NSError *error) {
         if (error != nil) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [SCUIUtilities presentError: error];
@@ -590,35 +590,26 @@
         [SCMigrationUtilities copyLegacySettingsToDefaults];
     }
 
-    // start up our daemon XPC
+    BOOL runningTests = NSProcessInfo.processInfo.environment[@"XCTestConfigurationFilePath"] != nil;
+
+    // Create the client now, but do not wake an idle helper just because the UI
+    // opened. launchd starts the registered Mach service on the first real action.
     self.xpc = [SCXPCClient new];
-    [self.xpc connectToHelperTool];
     
-    // if we don't have a connection within 0.5 seconds,
-    // OR we get back a connection with an old daemon version
-    // AND we're running a modern block (which should have a daemon running it)
-    // something's wrong with our app-daemon connection. This probably means one of two things:
-    //   1. The daemon got unloaded somehow and failed to restart. This is a big problem because the block won't come off.
-    //   2. The daemon doesn't want to talk to us anymore, potentially because we've changed our signing certificate. This is a
-    //      smaller problem, but still not great because the app can't communicate anything to the daemon.
-    //   3. There's a daemon but it's an old version, and should be replaced.
-    // in any case, let's go try to reinstall the daemon
-    // (we debounce this call so it happens only once, after the connection has been invalidated for an extended period)
-    if ([SCBlockUtilities modernBlockIsRunning]) {
+    // Read the embedded version without waking an idle service. Upgrade a
+    // missing/older helper once, or reconnect when an active block needs its
+    // owner. Tests never run this privileged recovery path.
+    NSString* installedDaemonVersion = [self.xpc installedDaemonVersion];
+    BOOL helperNeedsUpgrade = installedDaemonVersion.length == 0 ||
+        [SELFCONTROL_VERSION_STRING compare:installedDaemonVersion options:NSNumericSearch] == NSOrderedDescending;
+    BOOL activeBlockNeedsRecovery = [SCBlockUtilities modernBlockIsRunning];
+    if (!runningTests && (activeBlockNeedsRecovery || helperNeedsUpgrade)) {
+        if (activeBlockNeedsRecovery) [self.xpc connectToHelperTool];
         [NSTimer scheduledTimerWithTimeInterval: 0.5 repeats: NO block:^(NSTimer * _Nonnull timer) {
-            [self.xpc getVersion:^(NSString * _Nonnull daemonVersion, NSError * _Nonnull error) {
-                if (error == nil) {
-                    if ([SELFCONTROL_VERSION_STRING compare: daemonVersion options: NSNumericSearch] == NSOrderedDescending) {
-                        NSLog(@"Daemon version of %@ is out of date (current version is %@).", daemonVersion, SELFCONTROL_VERSION_STRING);
-                        [SCSentry addBreadcrumb: @"Detected out-of-date daemon" category: @"app"];
-                        [self reinstallDaemon];
-                    } else {
-                        [SCSentry addBreadcrumb: @"Detected up-to-date daemon" category:@"app"];
-                        NSLog(@"Daemon version of %@ is up-to-date!", daemonVersion);
-                    }
-                } else {
-                    NSLog(@"ERROR: Fetching daemon version failed with error %@", error);
-                    [self reinstallDaemon];
+            [self.xpc ensureDaemonInstalled:^(NSError *error) {
+                if (error != nil && ![SCMiscUtilities errorIsAuthCanceled:error]) {
+                    NSLog(@"ERROR: Updating or restoring the helper failed with error %@", error);
+                    [SCUIUtilities presentError:error];
                 }
             }];
         }];
@@ -678,25 +669,6 @@
 
 - (void)applicationWillTerminate:(NSNotification *)notification {
     [settings_ synchronizeSettings];
-}
-
-- (void)reinstallDaemon {
-    NSLog(@"Attempting to reinstall daemon...");
-    [SCSentry addBreadcrumb: @"Reinstalling daemon" category:@"app"];
-    [self.xpc installDaemon:^(NSError * _Nonnull error) {
-        if (error == nil) {
-            NSLog(@"Reinstalled daemon successfully!");
-            [SCSentry addBreadcrumb: @"Daemon reinstalled successfully" category:@"app"];
-            
-            NSLog(@"Retrying helper tool connection...");
-            [self.xpc performSelectorOnMainThread: @selector(connectToHelperTool) withObject: nil waitUntilDone: YES];
-        } else {
-            if (![SCMiscUtilities errorIsAuthCanceled: error]) {
-                NSLog(@"ERROR: Reinstalling daemon failed with error %@", error);
-                [SCUIUtilities presentError: error];
-            }
-        }
-    }];
 }
 
 - (IBAction)showDomainList:(id)sender {
@@ -856,15 +828,15 @@
         }
 		[self refreshUserInterface];
 
-        [self.xpc installDaemon:^(NSError * _Nonnull error) {
+        [self.xpc ensureDaemonInstalled:^(NSError * _Nonnull error) {
             if (error != nil) {
                 [SCUIUtilities presentError: error];
                 self.addingBlock = false;
                 [self refreshUserInterface];
                 return;
             } else {
-                [SCSentry addBreadcrumb: @"Daemon installed successfully (en route to installing block)" category:@"app"];
-                // helper tool installed successfully, let's prepare to start the block!
+                [SCSentry addBreadcrumb: @"Daemon is ready (en route to installing block)" category:@"app"];
+                // The helper is ready, so prepare to start the block.
                 // for legacy reasons, BlockDuration is in minutes, so convert it to seconds before passing it through]
                 // sanity check duration (must be above zero)
                 NSTimeInterval blockDurationSecs = MAX([[self->defaults_ valueForKey: @"BlockDuration"] intValue] * 60, 0);

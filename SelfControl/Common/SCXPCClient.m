@@ -8,6 +8,7 @@
 #import "SCXPCClient.h"
 #import "SCDaemonProtocol.h"
 #import <ServiceManagement/ServiceManagement.h>
+#import <Security/Security.h>
 #import "SCXPCAuthorization.h"
 #import "SCErr.h"
 
@@ -17,6 +18,8 @@
 
 @property (atomic, strong, readwrite) NSXPCConnection* daemonConnection;
 @property (atomic, copy, readwrite) NSData* authorization;
+@property (atomic, assign) BOOL daemonInstallCheckInProgress;
+@property (atomic, strong) NSMutableArray* daemonInstallCallbacks;
 
 @end
 
@@ -138,6 +141,23 @@
     return (self.daemonConnection != nil);
 }
 
+- (NSString*)installedDaemonVersion {
+    NSURL* helperURL = [NSURL fileURLWithPath:@"/Library/PrivilegedHelperTools/org.dayloft.focusd"];
+    SecStaticCodeRef staticCode = NULL;
+    OSStatus status = SecStaticCodeCreateWithPath((__bridge CFURLRef)helperURL, kSecCSDefaultFlags, &staticCode);
+    if (status != errSecSuccess || staticCode == NULL) return nil;
+
+    CFDictionaryRef signingInfo = NULL;
+    status = SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation, &signingInfo);
+    CFRelease(staticCode);
+    if (status != errSecSuccess || signingInfo == NULL) return nil;
+
+    NSDictionary* info = CFBridgingRelease(signingInfo);
+    NSDictionary* plist = info[(__bridge NSString*)kSecCodeInfoPList];
+    NSString* version = plist[@"CFBundleShortVersionString"];
+    return [version isKindOfClass:NSString.class] ? version : nil;
+}
+
 - (void)installDaemon:(void(^)(NSError*))callback {
     // make sure authorization is set up (if we haven't connected yet)
     [self setupAuthorization];
@@ -220,6 +240,52 @@
         NSLog(@"Daemon installed successfully!");
         callback(nil);
     }
+}
+
+- (void)finishDaemonInstallCheck:(NSError*)error {
+    NSArray* callbacks;
+    @synchronized (self) {
+        callbacks = [self.daemonInstallCallbacks copy];
+        [self.daemonInstallCallbacks removeAllObjects];
+        self.daemonInstallCheckInProgress = NO;
+    }
+    void (^invokeCallbacks)(void) = ^{
+        for (void (^callback)(NSError*) in callbacks) callback(error);
+    };
+    if ([NSThread isMainThread]) {
+        invokeCallbacks();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), invokeCallbacks);
+    }
+}
+
+- (void)ensureDaemonInstalled:(void(^)(NSError*))callback {
+    @synchronized (self) {
+        if (self.daemonInstallCheckInProgress) {
+            [self.daemonInstallCallbacks addObject:[callback copy]];
+            return;
+        }
+        self.daemonInstallCheckInProgress = YES;
+        self.daemonInstallCallbacks = [NSMutableArray arrayWithObject:[callback copy]];
+    }
+
+    [self getVersion:^(NSString *daemonVersion, NSError *versionError) {
+        BOOL upToDate = versionError == nil && daemonVersion.length > 0 &&
+            [SELFCONTROL_VERSION_STRING compare:daemonVersion options:NSNumericSearch] != NSOrderedDescending;
+        if (upToDate) {
+            [self finishDaemonInstallCheck:nil];
+            return;
+        }
+
+        if (versionError == nil) {
+            NSLog(@"Daemon version of %@ is out of date (current version is %@).", daemonVersion, SELFCONTROL_VERSION_STRING);
+        } else {
+            NSLog(@"Helper is unavailable; installing it once before the requested action: %@", versionError);
+        }
+        [self installDaemon:^(NSError *installError) {
+            [self finishDaemonInstallCheck:installError];
+        }];
+    }];
 }
 
 - (BOOL)connectionIsActive {

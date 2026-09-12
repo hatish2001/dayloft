@@ -117,7 +117,23 @@
         XCTAssertTrue([manager.hosts.hosts containsObject:name], @"Missing %@", name);
     }
     XCTAssertFalse([manager.hosts.hosts containsObject:@"api.www.instagram.com"]);
-    XCTAssertEqualObjects(manager.firewall.addresses, ([NSSet setWithArray:@[@"192.0.2.10", @"2001:db8::10"]]));
+    XCTAssertEqual(manager.firewall.addresses.count, 0U);
+}
+- (void)testDenylistDomainsNeverCreateSharedIPFirewallRules {
+    MemoryBlockManager* manager = [MemoryBlockManager new];
+    [manager addBlockEntryFromString:@"https://www.youtube.com/watch?v=example"];
+    [manager addBlockEntryFromString:@"https://www.instagram.com/reels/example"];
+    XCTAssertTrue([manager finalizeBlock]);
+    XCTAssertEqual(manager.firewall.addresses.count, 0U);
+    XCTAssertTrue([manager.hosts.hosts containsObject:@"youtube.com"]);
+    XCTAssertTrue([manager.hosts.hosts containsObject:@"instagram.com"]);
+}
+- (void)testDenylistURLWithExplicitPortStillBlocksItsHostname {
+    MemoryBlockManager* manager = [MemoryBlockManager new];
+    [manager addBlockEntryFromString:@"https://example.com:8443/private"];
+    XCTAssertTrue([manager finalizeBlock]);
+    XCTAssertTrue([manager.hosts.hosts containsObject:@"example.com"]);
+    XCTAssertEqual(manager.firewall.addresses.count, 0U);
 }
 - (void)testInstagramSubdomainProtectsParent {
     BlockManager* manager = [[BlockManager alloc] initAsAllowlist:NO];
@@ -151,6 +167,11 @@
     MemoryBlockManager* manager = [MemoryBlockManager new];
     [manager addBlockEntry:[SCBlockEntry entryWithHostname:@"2001:db8::123"]];
     XCTAssertTrue([manager.firewall.addresses containsObject:@"2001:db8::123"]);
+}
+- (void)testIPv4LiteralStillReachesFirewall {
+    MemoryBlockManager* manager = [MemoryBlockManager new];
+    [manager addBlockEntry:[SCBlockEntry entryWithHostname:@"192.0.2.123"]];
+    XCTAssertTrue([manager.firewall.addresses containsObject:@"192.0.2.123"]);
 }
 - (void)testFirewallRulesCoverTCPAndUDPForBothAddressFamilies {
     PacketFilter* pf = [[PacketFilter alloc] initAsAllowlist:NO];

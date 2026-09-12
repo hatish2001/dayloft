@@ -6,6 +6,7 @@
 #import "SCRecurringSchedule.h"
 @interface AppController (DayloftConfiguration)
 - (NSDictionary*)blockSettingsSnapshot;
+@property (nonatomic, strong, readonly) SCXPCClient* xpc;
 @end
 @interface SCDayloftBridge ()
 @property (nonatomic, weak) AppController* controller;
@@ -14,7 +15,7 @@
 @end
 @implementation SCDayloftBridge
 - (instancetype)initWithController:(AppController*)controller {
-    if ((self = [super init])) { _controller = controller; _client = [SCXPCClient new]; _breakLock = [NSLock new]; }
+    if ((self = [super init])) { _controller = controller; _client = controller.xpc ?: [SCXPCClient new]; _breakLock = [NSLock new]; }
     return self;
 }
 - (NSDictionary*)snapshot {
@@ -95,7 +96,7 @@
         completion([NSError errorWithDomain:@"Dayloft" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Add websites and choose days and different start and end times."}]); return;
     }
     NSDictionary* config = [self.controller blockSettingsSnapshot];
-    [self.client installDaemon:^(NSError* error) {
+    [self.client ensureDaemonInstalled:^(NSError* error) {
         if (error) { dispatch_async(dispatch_get_main_queue(), ^{ completion(error); }); return; }
         [self.client refreshConnectionAndRun:^{
             [self.client setRecurringSchedules:schedules controllingUID:getuid() blockSettings:config reply:^(NSError* error) {

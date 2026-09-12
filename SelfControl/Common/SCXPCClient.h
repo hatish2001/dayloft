@@ -14,7 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly, getter=isConnected) BOOL connected;
 
 - (void)connectToHelperTool;
+- (nullable NSString*)installedDaemonVersion;
 - (void)installDaemon:(void(^)(NSError*))callback;
+- (void)ensureDaemonInstalled:(void(^)(NSError*))callback;
 - (void)refreshConnectionAndRun:(void(^)(void))callback;
 - (void)connectAndExecuteCommandBlock:(void(^)(NSError *))commandBlock;
 

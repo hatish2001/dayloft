@@ -20,27 +20,35 @@ for name in ['Sentry.framework']:
 helper = app / 'Contents/Library/LaunchServices/org.dayloft.focusd'
 assert helper.is_file(), 'Missing privileged helper'
 assert (app / 'Contents/MacOS/dayloft-cli').is_file(), 'Missing CLI'
-output = subprocess.check_output(['/usr/bin/otool', '-arch', platform.machine(), '-s', '__TEXT', '__info_plist', str(helper)], text=True)
-raw = bytearray()
-for line in output.splitlines():
-    fields = line.split()
-    if fields and re.fullmatch(r'[0-9a-fA-F]{16}', fields[0]):
-        for word in fields[1:]:
-            if re.fullmatch(r'[0-9a-fA-F]{8}', word):
-                raw.extend(int(word, 16).to_bytes(4, 'little'))
-            elif re.fullmatch(r'[0-9a-fA-F]{2}', word):
-                # otool prints remaining bytes separately when the section size
-                # is not divisible by four (for example, unsigned helper builds).
-                raw.append(int(word, 16))
-end = raw.find(b'</plist>')
-assert end >= 0, 'Helper Info.plist section missing'
-helper_info = plistlib.loads(bytes(raw[:end + len(b'</plist>')]))
+def embedded_plist(section):
+    output = subprocess.check_output(
+        ['/usr/bin/otool', '-arch', platform.machine(), '-s', '__TEXT', section, str(helper)],
+        text=True,
+    )
+    raw = bytearray()
+    for line in output.splitlines():
+        fields = line.split()
+        if fields and re.fullmatch(r'[0-9a-fA-F]{16}', fields[0]):
+            for word in fields[1:]:
+                if re.fullmatch(r'[0-9a-fA-F]{8}', word):
+                    raw.extend(int(word, 16).to_bytes(4, 'little'))
+                elif re.fullmatch(r'[0-9a-fA-F]{2}', word):
+                    raw.append(int(word, 16))
+    end = raw.find(b'</plist>')
+    assert end >= 0, f'Helper {section} section missing'
+    return plistlib.loads(bytes(raw[:end + len(b'</plist>')]))
+
+helper_info = embedded_plist('__info_plist')
 assert helper_info['CFBundleIdentifier'] == 'org.dayloft.focusd'
 for version_key in ['CFBundleVersion', 'CFBundleShortVersionString']:
     assert helper_info[version_key] == info[version_key], 'App and helper versions disagree'
 client_rule = helper_info['SMAuthorizedClients'][0]
 assert 'org.dayloft.Dayloft' in client_rule and 'org.dayloft.cli' in client_rule
 assert 'org.eyebeam' not in client_rule and 'DAYLOFT_SIGNING_TEAM' not in client_rule
+launchd_info = embedded_plist('__launchd_plist')
+assert launchd_info['MachServices']['org.dayloft.focusd'] is True
+assert launchd_info['RunAtLoad'] is True
+assert launchd_info['KeepAlive'] is False, 'Idle helper must remain registered without being kept alive'
 service_rule = info['SMPrivilegedExecutables']['org.dayloft.focusd']
 assert 'org.dayloft.focusd' in service_rule
 if '=' in service_rule and service_rule.rsplit('=', 1)[1].strip():

@@ -158,15 +158,12 @@
 	} else if(isIP) { // Both IPv4 and IPv6 destinations must reach PF.
 		[pf addRuleWithIP: entry.hostname port: entry.port maskLen: entry.maskLen];
 	} else if(!isIP) { // domain name
-        // Google-hosted services share a large address space.  Allowlist mode needs
-        // the known ranges, while a strict blocklist still blocks the resolved
-        // addresses so browser DNS settings cannot sidestep the hosts-file rule.
-        if ([self domainIsGoogle: entry.hostname] && isAllowlist) {
+        if (isAllowlist && [self domainIsGoogle: entry.hostname]) {
                 // just add the whole Google IP range, it's way too error-prone to do an allowlist block of Google any other way
                 // last updated: 9/23/21 from https://www.gstatic.com/ipranges/goog.json
                 [self addGoogleIPsToPF];
-        } else {
-            // non-Google domains just get looked up and blocked by IP
+        } else if (isAllowlist) {
+            // An allowlist needs destination addresses for its PF pass rules.
             NSArray* addresses = [self.class ipAddressesForDomainName: entry.hostname];
 
             for(NSUInteger i = 0; i < [addresses count]; i++) {
@@ -175,9 +172,14 @@
                 [pf addRuleWithIP: ip port: entry.port maskLen: entry.maskLen];
             }
         }
+
+        // Denylist hostnames are enforced precisely by /etc/hosts below. Adding
+        // their current addresses to PF also blocks unrelated domains on shared
+        // Google, Meta, Akamai, and Cloudflare infrastructure. Literal IP/CIDR
+        // entries still use PF via the isIP branch above.
 	}
 
-	if(hostsBlockingEnabled && ![entry.hostname isEqualToString: @"*"] && !entry.port && !isIP) {
+	if(hostsBlockingEnabled && ![entry.hostname isEqualToString: @"*"] && !isIP) {
         if (appendMode) {
             [hostBlockerSet appendExistingBlockWithRuleForDomain: entry.hostname];
         } else {

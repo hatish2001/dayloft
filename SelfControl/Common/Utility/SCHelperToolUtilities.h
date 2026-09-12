@@ -19,8 +19,8 @@ NS_ASSUME_NONNULL_BEGIN
 // ipfw firewall.
 + (BOOL)installBlockRulesFromSettings;
 
-// calls SMJobRemove to unload the daemon from launchd
-// (which also kills the running process, synchronously)
+// Exits an idle helper process while preserving its launchd registration, so
+// the next XPC action can start it without another privileged installation.
 + (void)unloadDaemonJob;
 
 // Checks the settings system to see whether the user wants their web browser

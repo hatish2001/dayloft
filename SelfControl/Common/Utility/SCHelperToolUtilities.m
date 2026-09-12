@@ -7,7 +7,7 @@
 
 #import "SCHelperToolUtilities.h"
 #import "BlockManager.h"
-#import <ServiceManagement/ServiceManagement.h>
+#include <stdlib.h>
 
 @implementation SCHelperToolUtilities
 
@@ -36,28 +36,19 @@
 }
 
 + (void)unloadDaemonJob {
-    NSLog(@"Unloading SelfControl daemon...");
-    [SCSentry addBreadcrumb: @"Daemon about to unload" category: @"daemon"];
+    NSLog(@"Exiting idle Dayloft helper process...");
+    [SCSentry addBreadcrumb: @"Idle daemon process about to exit" category: @"daemon"];
     SCSettings* settings = [SCSettings sharedSettings];
 
-    // we're about to unload the launchd job
-    // this will kill this process, so we have to make sure
-    // all settings are synced before we unload
+    // Keep the launchd job registered. MachServices will start a fresh process
+    // on the next request without asking the user to install the helper again.
     NSError* syncErr = [settings syncSettingsAndWait: 5.0];
     if (syncErr != nil) {
-        NSLog(@"WARNING: Sync failed or timed out with error %@ before unloading daemon job", syncErr);
+        NSLog(@"WARNING: Sync failed or timed out with error %@ before exiting idle daemon", syncErr);
         [SCSentry captureError: syncErr];
     }
     
-    // uh-oh, looks like it's 5 seconds later and the sync hasn't completed yet. Bad news.
-    CFErrorRef cfError = NULL;
-    // this should block until the process is dead, so we should never get to the other side if it's successful
-    SILENCE_OSX10_10_DEPRECATION(
-    SMJobRemove(kSMDomainSystemLaunchd, CFSTR("org.dayloft.focusd"), NULL, YES, &cfError);
-                                 );
-    if (cfError) {
-        NSLog(@"Failed to remove selfcontrold daemon with error %@", cfError);
-    }
+    exit(EXIT_SUCCESS);
 }
 
 + (void)clearCachesIfRequested {
