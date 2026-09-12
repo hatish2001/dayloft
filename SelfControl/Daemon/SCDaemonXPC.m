@@ -23,7 +23,7 @@
         reply(error);
         return;
     } else {
-        NSLog(@"AUTHORIZATION ACCEPTED for startBlock with authData %@ and command %s", authData, sel_getName(_cmd));
+        NSLog(@"Authorization accepted for %s", sel_getName(_cmd));
     }
 
     [SCDaemonBlockMethods startBlockWithControllingUID: controllingUID blocklist: blocklist isAllowlist:isAllowlist endDate: endDate blockSettings:blockSettings authorization: authData reply: reply];
@@ -80,7 +80,7 @@
         reply(error);
         return;
     } else {
-        NSLog(@"AUTHORIZATION ACCEPTED for updateBlocklist with authData %@ and command %s", authData, sel_getName(_cmd));
+        NSLog(@"Authorization accepted for %s", sel_getName(_cmd));
     }
     
     [SCDaemonBlockMethods updateBlocklist: newBlocklist authorization: authData reply: reply];
@@ -98,7 +98,7 @@
         reply(error);
         return;
     } else {
-        NSLog(@"AUTHORIZATION ACCEPTED for updateBlockENdDate with authData %@ and command %s", authData, sel_getName(_cmd));
+        NSLog(@"Authorization accepted for %s", sel_getName(_cmd));
     }
     
     [SCDaemonBlockMethods updateBlockEndDate: newEndDate authorization: authData reply: reply];

@@ -19,6 +19,8 @@
 - (int)startBlock { return self.installationStatus; }
 - (void)finishAppending {}
 - (int)refreshPFRules { return self.installationStatus; }
+- (int)stopBlock:(BOOL)force { return self.installationStatus; }
+- (BOOL)containsSelfControlBlock { return NO; }
 @end
 
 @interface MemoryHosts : HostFileBlockerSet
@@ -30,6 +32,10 @@
 - (void)addRuleBlockingDomain:(NSString*)domain { @synchronized(self) { [self.hosts addObject:domain]; } }
 - (void)addSelfControlBlockFooter {}
 - (BOOL)writeNewFileContents { return self.writeSucceeds; }
+- (void)removeSelfControlBlock {}
+- (void)revertFileContentsToDisk {}
+- (BOOL)containsSelfControlBlock { return NO; }
+- (void)deleteBackupHostsFile {}
 @end
 
 @interface MemoryBlockManager : BlockManager
@@ -59,6 +65,15 @@
 @interface SCWebsiteBlockingTests : XCTestCase
 @end
 @implementation SCWebsiteBlockingTests
+- (void)testCleanupDoesNotMistakeRemovedConfigForUnloadedFirewall {
+    MemoryBlockManager* manager = [MemoryBlockManager new];
+    manager.firewall.installationStatus = 1;
+    XCTAssertFalse([manager clearBlock]);
+    XCTAssertFalse([manager forceClearBlock]);
+    manager.firewall.installationStatus = 0;
+    XCTAssertTrue([manager clearBlock]);
+    XCTAssertTrue([manager forceClearBlock]);
+}
 - (void)testFailedConfigurationWriteNeverStartsFirewall {
     XCTAssertNotEqual([[FailingConfigurationFirewall new] startBlock], 0);
 }

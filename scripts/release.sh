@@ -15,6 +15,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   printf '%s\n' 'Commit the exact source before producing a public release.' >&2; exit 1
 fi
 version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' SelfControl/Info.plist)"
+python3 scripts/verify-versions.py
 mkdir -p artifacts dist
 xcodebuild -workspace Dayloft.xcworkspace -scheme Dayloft -configuration Release \
   -destination 'generic/platform=macOS' -derivedDataPath artifacts/ReleaseDerivedData \

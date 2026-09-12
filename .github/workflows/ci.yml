@@ -13,25 +13,32 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
       - name: Install pinned dependencies
         run: bundle exec pod install --project-directory=SelfControl
+      - name: Verify release versions
+        run: python3 scripts/verify-versions.py
       - name: Original contracts and new native tests
         run: ./scripts/test.sh
+      - name: Build both release architectures
+        run: ./scripts/build-universal.sh
       - name: Verify signed update rejection
         run: ./scripts/test-update-signing.sh
       - name: Check public source hygiene
         run: python3 scripts/audit-source.py
       - name: Keep test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: test-results
           path: |
             artifacts/tests.log
+            artifacts/universal-build.log
             artifacts/DerivedData/Logs/Test/*.xcresult
           retention-days: 7

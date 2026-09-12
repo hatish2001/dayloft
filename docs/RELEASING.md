@@ -9,7 +9,7 @@ Apple requires a Developer ID-signed app and notarization for the normal direct-
 ## Before the first release
 
 1. Use the dedicated public repository [hatish2001/dayloft](https://github.com/hatish2001/dayloft). Keep LICENSE, NOTICE.md, dependency licenses, and matching source available with every binary.
-2. Enable private vulnerability reporting. Configure a `release` Actions environment with required reviewers.
+2. Enable private vulnerability reporting. The `release` Actions environment permits only `main`; add required reviewers if your maintainer process needs them.
 3. Provide a **Developer ID Application** signing identity and notarization credentials. No private keys or credentials belong in the repository.
 4. Complete the manual verification below on a test Mac, including an Intel Mac if advertising Intel support.
 5. Commit and tag the version represented by `SelfControl/Info.plist`. Confirm CI succeeds on the actual public repository.
@@ -45,7 +45,7 @@ The manual `Prepare notarized release` workflow builds the same files and upload
 
 Also set environment variable `DAYLOFT_UPDATE_PUBLIC_KEY` to the matching public key.
 
-Credentials are loaded only into the isolated release runner. PR CI has no signing credentials. Review and publish the resulting GitHub release draft after the distribution checks. Ordinary source pushes run CI; they do not publish a binary or force an update.
+Credentials are loaded only into the isolated release runner. PR CI has no signing credentials. Review and publish the resulting GitHub release draft after the distribution checks. Ordinary source pushes run CI, including both Release architectures; they do not publish a binary or force an update. Release runs are serialized and restricted to `main`. Action versions are pinned by commit, and checkout credentials are not persisted.
 
 ## Manual enforcement verification
 

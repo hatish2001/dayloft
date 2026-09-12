@@ -220,8 +220,9 @@ NSString* const kPFAnchorCommand = @"anchor \"org.dayloft\"";
 	NSError* err;
 	NSString* token = [self readPFToken: &err];
 
-	[@"" writeToFile: @"/etc/pf.anchors/org.dayloft" atomically: true encoding: NSUTF8StringEncoding error: nil];
 	NSString* mainConf = [NSString stringWithContentsOfFile: @"/etc/pf.conf" encoding: NSUTF8StringEncoding error: nil];
+    if (mainConf == nil) return EIO; // Never replace unreadable system configuration.
+    if (![@"" writeToFile:@"/etc/pf.anchors/org.dayloft" atomically:YES encoding:NSUTF8StringEncoding error:nil]) return EIO;
 	NSArray* lines = [mainConf componentsSeparatedByString: @"\n"];
 	NSMutableString* newConf = [NSMutableString stringWithCapacity: [mainConf length]];
 	for (NSString* line in lines) {
@@ -231,13 +232,15 @@ NSString* const kPFAnchorCommand = @"anchor \"org.dayloft\"";
 	}
 	newConf = [[newConf stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]] mutableCopy];
 	[newConf appendString: @"\n"];
-	[newConf writeToFile: @"/etc/pf.conf" atomically: true encoding: NSUTF8StringEncoding error: nil];
+	if (![newConf writeToFile:@"/etc/pf.conf" atomically:YES encoding:NSUTF8StringEncoding error:nil]) return EIO;
 
 	NSString* commandString;
 	if ([token length] && !force) {
 		commandString = [NSString stringWithFormat: @"-X %@ -f /etc/pf.conf", token];
 	} else {
-		commandString = @"-d -f /etc/pf.conf";
+		// A missing/stale token must never disable the system-wide firewall.
+        // Reload the preserved configuration, removing only Dayloft's anchor.
+        commandString = @"-f /etc/pf.conf";
 	}
 	NSArray* args = [commandString componentsSeparatedByString: @" "];
 

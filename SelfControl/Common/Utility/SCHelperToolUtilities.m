@@ -50,7 +50,7 @@
     }
     
     // uh-oh, looks like it's 5 seconds later and the sync hasn't completed yet. Bad news.
-    CFErrorRef cfError;
+    CFErrorRef cfError = NULL;
     // this should block until the process is dead, so we should never get to the other side if it's successful
     SILENCE_OSX10_10_DEPRECATION(
     SMJobRemove(kSMDomainSystemLaunchd, CFSTR("org.dayloft.focusd"), NULL, YES, &cfError);
@@ -152,9 +152,19 @@
     }
 }
 
-+ (void)removeBlock {
++ (BOOL)removeBlock {
+    SCSettings* settings = [SCSettings sharedSettings];
+    if (![[BlockManager new] clearBlock]) {
+        // Preserve the end date and running state so cleanup is retried, even
+        // when this began as recovery of orphaned rules at daemon startup.
+        [settings setValue:@YES forKey:@"BlockIsRunning"];
+        [settings setValue:@"Dayloft could not fully remove its network rules. It will keep retrying." forKey:@"DayloftEnforcementError"];
+        [settings syncSettingsAndWait:5];
+        [self sendConfigurationChangedNotification];
+        return NO;
+    }
     [SCBlockUtilities removeBlockFromSettings];
-    [[BlockManager new] clearBlock];
+    [settings setValue:@"" forKey:@"DayloftEnforcementError"];
     
     [SCHelperToolUtilities clearCachesIfRequested];
 
@@ -174,6 +184,7 @@
     [SCHelperToolUtilities sendConfigurationChangedNotification];
 
     NSLog(@"INFO: Block cleared.");
+    return syncErr == nil;
 }
 
 + (void)sendConfigurationChangedNotification {

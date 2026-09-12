@@ -36,7 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Removes block via settings, host file rules and ipfw rules,
 // deleting user caches if requested, and migrating legacy settings.
-+ (void)removeBlock;
++ (BOOL)removeBlock;
 
 + (void)sendConfigurationChangedNotification;
 

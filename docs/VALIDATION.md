@@ -4,7 +4,7 @@ Validated locally on Apple silicon with macOS 26 and Xcode 26.6 in September 202
 
 ## Automated checks
 
-- 43 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, 13 website-rule/enforcement-result tests, and 3 update-policy tests.
+- 51 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, 14 website-rule/enforcement-result tests, 3 update-policy tests, and 7 daemon lifecycle tests.
 - The original test file matches its recorded SHA-256 checksum.
 - A fresh public-source copy with newly installed, pinned CocoaPods dependencies builds and passes tests.
 - Both unsigned test bundles and the locally Apple Development-signed app pass resource and embedded-helper identity checks.
@@ -49,3 +49,7 @@ Sparkle 2.9.6 is pinned and bundled. Update-policy tests reject invalid feed/key
 Firewall setup now propagates failed configuration writes before loading PF. Appending websites verifies hosts/PF results, isolates append state per manager, and preserves previously blocked entries in the stored list. Three new regression tests cover these failure paths and instance isolation. The lower-left promotional message and dot were removed.
 
 The 4.2.0 local Apple Development-signed app builds and launches. The sidebar tagline and dot are absent; the version and disabled-unconfigured update button are visible. The universal Release build passes and its nine app/helper/CLI/framework binaries contain both arm64 and x86_64. A disposable-key test verifies signatures and rejects a modified payload and mismatched key. A local DMG made from the universal build also passes Sparkle appcast generation and version/size/URL/signature-shape validation. This test uses an ad-hoc signature and is not notarization or an installed-app update test.
+
+## Final code and pipeline review (4.2.1)
+
+See [the release review](RELEASE_REVIEW.md) for findings, fixes, and remaining launch checks. The new lifecycle suite links an inert daemon double and intercepts network-rule operations, persistence, cache clearing, and notifications; tests never start the real daemon. All 51 local tests and the universal Release build pass.

@@ -11,6 +11,10 @@ DerivedData/
 **/.build/
 **/.swiftpm/
 *.p12
+*.key
+*.pem
+*.keychain
+*.keychain-db
 *.p8
 *.mobileprovision
 *.provisionprofile

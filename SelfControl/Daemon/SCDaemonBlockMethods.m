@@ -56,9 +56,8 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
 
 + (NSLock*)daemonMethodLock {
     static NSLock* lock = nil;
-    if (lock == nil) {
-        lock = [[NSLock alloc] init];
-    }
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ lock = [[NSLock alloc] init]; });
     return lock;
 }
 
@@ -139,7 +138,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     [[SCDaemon sharedDaemon] resetInactivityTimer];
     [SCHelperToolUtilities sendConfigurationChangedNotification];
     [SCSentry addBreadcrumb: @"Daemon saved a scheduled block" category: @"daemon"];
-    reply(nil);
+    reply(syncErr);
     [self.daemonMethodLock unlock];
 }
 
@@ -162,7 +161,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         if (![self hasRecurringSchedules]) [[SCDaemon sharedDaemon] stopCheckupTimer];
     }
     [[SCDaemon sharedDaemon] resetInactivityTimer];
-    reply(nil);
+    reply(syncErr);
     [self.daemonMethodLock unlock];
 }
 
@@ -236,28 +235,36 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         return;
     }
 
-    NSLog(@"Adding firewall rules...");
-    if (![SCHelperToolUtilities installBlockRulesFromSettings]) {
-        [[BlockManager new] clearBlock];
+    [settings setValue:@YES forKey:@"BlockIsRunning"];
+    NSError* syncErr = [settings syncSettingsAndWait:5];
+    if (syncErr) {
         [SCBlockUtilities removeBlockFromSettings];
         [settings syncSettingsAndWait:5];
-        reply([NSError errorWithDomain:@"Dayloft" code:710 userInfo:@{NSLocalizedDescriptionKey:[settings valueForKey:@"DayloftEnforcementError"]}]);
         [self.daemonMethodLock unlock];
+        reply(syncErr);
+        return; // No system rules without a durable end time for recovery.
+    }
+
+    NSLog(@"Adding firewall rules...");
+    if (![SCHelperToolUtilities installBlockRulesFromSettings]) {
+        NSString* message = [settings valueForKey:@"DayloftEnforcementError"];
+        if ([[BlockManager new] clearBlock]) {
+            [SCBlockUtilities removeBlockFromSettings];
+        } else {
+            // A partial installation must remain recoverable by the checkup.
+            [settings setValue:NSDate.distantPast forKey:@"BlockEndDate"];
+        }
+        [settings syncSettingsAndWait:5];
+        [self.daemonMethodLock unlock];
+        [[SCDaemon sharedDaemon] startCheckupTimer];
+        reply([NSError errorWithDomain:@"Dayloft" code:710 userInfo:@{NSLocalizedDescriptionKey:message.length ? message : @"Network rules could not be installed."}]);
         return;
     }
-    [settings setValue: @YES forKey: @"BlockIsRunning"];
-    NSMutableArray* sessions = [[settings valueForKey:@"DayloftFocusSessions"] mutableCopy];
-    if (!sessions) sessions = [NSMutableArray new];
+    NSMutableArray* sessions = [[settings valueForKey:@"DayloftFocusSessions"] mutableCopy] ?: [NSMutableArray new];
     [sessions addObject:@{@"start": [NSDate date], @"end": endDate, @"breaks": @[], @"mode": blockSettings[@"DayloftMode"] ?: @"Focus", @"uid": @(controllingUID)}];
-    // Bounded history; enough for daily totals and streaks without unbounded settings growth.
     if (sessions.count > 2000) [sessions removeObjectsInRange:NSMakeRange(0, sessions.count - 2000)];
     [settings setValue:sessions forKey:@"DayloftFocusSessions"];
-    
-    NSError* syncErr = [settings syncSettingsAndWait: 5]; // synchronize ASAP since BlockIsRunning is a really important one
-    if (syncErr != nil) {
-        NSLog(@"WARNING: Sync failed or timed out with error %@ after starting block", syncErr);
-        [SCSentry captureError: syncErr];
-    }
+    syncErr = [settings syncSettingsAndWait:5];
 
     NSLog(@"Firewall rules added!");
     
@@ -269,11 +276,11 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
 
     [SCSentry addBreadcrumb: @"Daemon added block successfully" category: @"daemon"];
     NSLog(@"INFO: Block successfully added.");
-    reply(nil);
+    reply(syncErr);
 
     [[SCDaemon sharedDaemon] resetInactivityTimer];
-    [[SCDaemon sharedDaemon] startCheckupTimer];
     [self.daemonMethodLock unlock];
+    [[SCDaemon sharedDaemon] startCheckupTimer];
 }
 
 + (void)updateBlocklist:(NSArray<NSString*>*)newBlocklist authorization:(NSData *)authData reply:(void(^)(NSError* error))reply {
@@ -357,7 +364,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
 
     [SCSentry addBreadcrumb: @"Daemon updated blocklist successfully" category: @"daemon"];
     NSLog(@"INFO: Blocklist successfully updated.");
-    reply(nil);
+    reply(syncErr);
 
     [[SCDaemon sharedDaemon] resetInactivityTimer];
     [self.daemonMethodLock unlock];
@@ -393,12 +400,13 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     // and we also won't let them extend by more than 24 hours at a time, for safety...
     // TODO: they should be able to extend up to MaxBlockLength minutes, right?
     NSDate* currentEndDate = [settings valueForKey: @"BlockEndDate"];
-    if ([newEndDate timeIntervalSinceDate: currentEndDate] < 0) {
+    if (![newEndDate isKindOfClass:NSDate.class] || !isfinite([newEndDate timeIntervalSince1970]) || [newEndDate timeIntervalSinceDate: currentEndDate] < 0) {
         NSLog(@"ERROR: Can't update block end date to an earlier date");
         NSError* err = [SCErr errorWithCode: 308];
         [SCSentry captureError: err];
         reply(err);
         [self.daemonMethodLock unlock];
+        return;
     }
     if ([newEndDate timeIntervalSinceDate: currentEndDate] > 86400) { // 86400 seconds = 1 day
         NSLog(@"ERROR: Can't extend block end date by more than 1 day at a time");
@@ -406,8 +414,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         [SCSentry captureError: err];
         reply(err);
         [self.daemonMethodLock unlock];
+        return;
     }
     
+    NSArray* previousSessions = [settings valueForKey:@"DayloftFocusSessions"];
     [settings setValue: newEndDate forKey: @"BlockEndDate"];
     NSMutableArray* sessions = [[settings valueForKey:@"DayloftFocusSessions"] mutableCopy];
     if (sessions.count) {
@@ -421,6 +431,12 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     if (syncErr != nil) {
         NSLog(@"WARNING: Sync failed or timed out with error %@ after extending block", syncErr);
         [SCSentry captureError: syncErr];
+        [settings setValue:currentEndDate forKey:@"BlockEndDate"];
+        [settings setValue:previousSessions forKey:@"DayloftFocusSessions"];
+        [settings syncSettingsAndWait:5];
+        [self.daemonMethodLock unlock];
+        reply(syncErr);
+        return;
     }
 
     [SCHelperToolUtilities sendConfigurationChangedNotification];
@@ -494,7 +510,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
 
     [SCHelperToolUtilities sendConfigurationChangedNotification];
     [SCSentry addBreadcrumb: @"Daemon started a five-minute focus break" category: @"daemon"];
-    reply(nil);
+    reply(syncErr);
     [[SCDaemon sharedDaemon] resetInactivityTimer];
     [self.daemonMethodLock unlock];
 }
@@ -604,9 +620,12 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
             [self startBlockWithControllingUID:uid blocklist:[SCMiscUtilities cleanBlocklist:selected[@"domains"]] isAllowlist:[selected[@"allowlist"] boolValue] endDate:selectedInterval.endDate blockSettings:config authorization:nil reply:^(NSError* error) {
                 // Commit the occurrence after the start attempt. A crash before rules are
                 // installed must leave this window retryable on daemon restart.
-                occurrences[selected[@"id"]] = selectedInterval.startDate;
-                [settings setValue:occurrences forKey:@"DayloftScheduleOccurrences"];
-                [settings syncSettingsAndWait:5];
+                if (!error) {
+                    occurrences[selected[@"id"]] = selectedInterval.startDate;
+                    [settings setValue:occurrences forKey:@"DayloftScheduleOccurrences"];
+                    [settings setValue:@"" forKey:@"DayloftScheduleLastError"];
+                    [settings syncSettingsAndWait:5];
+                }
                 if (error) {
                     [settings setValue:error.localizedDescription forKey:@"DayloftScheduleLastError"];
                     [settings syncSettingsAndWait:5];
@@ -627,7 +646,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         
         [SCSentry captureMessage: @"Checkup ran and no active block found! Removing block, tampering suspected..."];
         
-        [SCHelperToolUtilities removeBlock];
+        if (![SCHelperToolUtilities removeBlock]) {
+            [self.daemonMethodLock unlock];
+            return; // Keep the timer alive and retry cleanup on the next checkup.
+        }
 
         [SCHelperToolUtilities sendConfigurationChangedNotification];
         
@@ -644,7 +666,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     } else if ([SCBlockUtilities currentBlockIsExpired]) {
         NSLog(@"INFO: Checkup ran, block expired, removing block.");
         
-        [SCHelperToolUtilities removeBlock];
+        if (![SCHelperToolUtilities removeBlock]) {
+            [self.daemonMethodLock unlock];
+            return; // Keep the timer alive and retry cleanup on the next checkup.
+        }
 
         [SCHelperToolUtilities sendConfigurationChangedNotification];
 
@@ -697,6 +722,13 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     [SCSentry addBreadcrumb: @"Daemon method checkBlockIntegrity called" category: @"daemon"];
 
     SCSettings* settings = [SCSettings sharedSettings];
+    // File-watch notifications also arrive for intentional break/expiry writes.
+    // Only checkupBlock may transition a paused or expired session.
+    if (![settings boolForKey:@"BlockIsRunning"] || [SCBlockUtilities currentBlockIsExpired] ||
+        [settings boolForKey:@"BlockPausedForBreak"]) {
+        [self.daemonMethodLock unlock];
+        return;
+    }
     PacketFilter* pf = [[PacketFilter alloc] init];
     HostFileBlockerSet* hostFileBlockerSet = [[HostFileBlockerSet alloc] init];
     if([[settings valueForKey:@"DayloftEnforcementError"] length] || ![pf containsSelfControlBlock] || (![settings boolForKey: @"ActiveBlockAsWhitelist"] && ![hostFileBlockerSet.defaultBlocker containsSelfControlBlock])) {

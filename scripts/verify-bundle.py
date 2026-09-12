@@ -36,6 +36,8 @@ end = raw.find(b'</plist>')
 assert end >= 0, 'Helper Info.plist section missing'
 helper_info = plistlib.loads(bytes(raw[:end + len(b'</plist>')]))
 assert helper_info['CFBundleIdentifier'] == 'org.dayloft.focusd'
+for version_key in ['CFBundleVersion', 'CFBundleShortVersionString']:
+    assert helper_info[version_key] == info[version_key], 'App and helper versions disagree'
 client_rule = helper_info['SMAuthorizedClients'][0]
 assert 'org.dayloft.Dayloft' in client_rule and 'org.dayloft.cli' in client_rule
 assert 'org.eyebeam' not in client_rule and 'DAYLOFT_SIGNING_TEAM' not in client_rule
@@ -45,3 +47,12 @@ if '=' in service_rule and service_rule.rsplit('=', 1)[1].strip():
     team = service_rule.rsplit('=', 1)[1].strip()
     assert client_rule.endswith(team), 'App and helper signing teams disagree'
 print('App resources and helper identity checks passed.')
+
+if '--universal' in sys.argv[2:]:
+    count = 0
+    for binary in app.rglob('*'):
+        if binary.is_file() and not binary.is_symlink() and 'Mach-O' in subprocess.check_output(['file', '-b', str(binary)], text=True):
+            subprocess.run(['lipo', str(binary), '-verify_arch', 'arm64', 'x86_64'], check=True)
+            count += 1
+    assert count >= 3, 'Missing app, CLI, or helper binaries'
+    print(f'Both architectures verified in {count} binaries.')

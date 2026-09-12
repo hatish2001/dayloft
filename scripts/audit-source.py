@@ -22,7 +22,7 @@ for name in sorted(set(paths)):
     path = root / name
     if not path.is_file():
         continue
-    if path.suffix.lower() in {'.p12', '.p8', '.mobileprovision', '.provisionprofile'}:
+    if path.suffix.lower() in {'.p12', '.p8', '.key', '.pem', '.keychain', '.keychain-db', '.mobileprovision', '.provisionprofile'}:
         problems.append((name, 'private signing material'))
     if any(part in {'.git', 'xcuserdata', 'DerivedData', 'artifacts', 'build', 'dist'} for part in path.relative_to(root).parts):
         problems.append((name, 'local/generated content'))

@@ -213,8 +213,8 @@
 }
 
 - (BOOL)clearBlock {
-	[pf stopBlock: false];
-	BOOL pfSuccess = ![pf containsSelfControlBlock];
+	int pfStatus = [pf stopBlock: false];
+	BOOL pfSuccess = pfStatus == 0 && ![pf containsSelfControlBlock];
 
 	[hostBlockerSet removeSelfControlBlock];
 	BOOL hostSuccess = [hostBlockerSet writeNewFileContents];
@@ -230,14 +230,15 @@
 	else {
 		if (!pfSuccess) {
 			NSLog(@"WARNING: Error clearing pf block. Tring to clear using force.");
-			[pf stopBlock: true];
+			pfStatus = [pf stopBlock: true];
+            pfSuccess = pfStatus == 0 && ![pf containsSelfControlBlock];
 		}
 		if (!hostSuccess) {
 			NSLog(@"WARNING: Error removing hostfile block.  Attempting to restore host file backup.");
 			[hostBlockerSet restoreBackupHostsFile];
 		}
 
-		clearedSuccessfully = ![self blockIsActive];
+		clearedSuccessfully = pfSuccess && ![self blockIsActive];
 
 		if ([hostBlockerSet.defaultBlocker containsSelfControlBlock]) {
 			NSLog(@"ERROR: Host file backup could not be restored.  This may result in a permanent block.");
@@ -250,14 +251,14 @@
 		}
 	}
 
-	[hostBlockerSet deleteBackupHostsFile];
+	if (clearedSuccessfully) [hostBlockerSet deleteBackupHostsFile];
 
 	return clearedSuccessfully;
 }
 
 - (BOOL)forceClearBlock {
-	[pf stopBlock: YES];
-	BOOL pfSuccess = ![pf containsSelfControlBlock];
+	int pfStatus = [pf stopBlock: YES];
+	BOOL pfSuccess = pfStatus == 0 && ![pf containsSelfControlBlock];
 
 	[hostBlockerSet removeSelfControlBlock];
 	BOOL hostSuccess = [hostBlockerSet writeNewFileContents];
@@ -279,7 +280,7 @@
 			[hostBlockerSet restoreBackupHostsFile];
 		}
 
-		clearedSuccessfully = ![self blockIsActive];
+		clearedSuccessfully = pfSuccess && ![self blockIsActive];
 
 		if ([hostBlockerSet.defaultBlocker containsSelfControlBlock]) {
 			NSLog(@"ERROR: Host file backup could not be restored.  This may result in a permanent block.");
