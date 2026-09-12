@@ -4,7 +4,7 @@ Validated locally on Apple silicon with macOS 26 and Xcode 26.6 in September 202
 
 ## Automated checks
 
-- 51 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, 14 website-rule/enforcement-result tests, 3 update-policy tests, and 7 daemon lifecycle tests.
+- 60 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, 16 website-rule/enforcement-result tests, 3 update-policy tests, 3 authentication-policy tests, and 11 daemon lifecycle tests.
 - The original test file matches its recorded SHA-256 checksum.
 - A fresh public-source copy with newly installed, pinned CocoaPods dependencies builds and passes tests.
 - Both unsigned test bundles and the locally Apple Development-signed app pass resource and embedded-helper identity checks.
@@ -55,3 +55,13 @@ The 4.2.0 local Apple Development-signed app builds and launches. The sidebar ta
 See [the release review](RELEASE_REVIEW.md) for findings, fixes, and remaining launch checks. The new lifecycle suite links an inert daemon double and intercepts network-rule operations, persistence, cache clearing, and notifications; tests never start the real daemon. All 51 local tests and the universal Release build pass.
 
 The [final public pipeline run](https://github.com/hatish2001/dayloft/actions/runs/34670926296) passed the 51 tests, universal Release build, version agreement, signed-update rejection, and source audit with the current Node 24 actions. A local Apple Development-signed 4.2.1 app also passes bundle/signature verification. No new live blocking or public notarization result is claimed.
+
+## Authentication and schedule synchronization repair (4.2.2)
+
+The inherited authorization policy supplied only the UI authentication mechanism. Local authd diagnostics reported that it failed to return a valid UID, explaining the repeating password dialog. The app now delegates mechanism selection to macOS and migrates only the exact defective Dayloft-owned version-1 rule, preserving custom administrator policies. Three isolated tests cover the default rule and migration boundaries. Runtime migration still requires normal macOS authorization; an end-to-end password retry remains pending.
+
+Schedules refresh from the helper alongside Home, display the same session/break countdown, and disable creation, editing, deletion, and switches during an active or starting session. The helper rejects recurring-schedule mutations while a block exists, including breaks and pending cleanup. Tests verify unchanged schedules/session on rejection, editing after successful expiry cleanup, and rollback on a failed save. A persistent configured marker distinguishes an intentionally empty schedule list from initial local drafts.
+
+X/Twitter and TikTok entries include their parent domains and known aliases; allowlists and unrelated DNS suffixes are not broadened. Adding sites during a break saves additions for normal resume and preserves existing entries without reinstalling rules early. These paths are covered by isolated tests; adding the sites to the user's live block and checking live enforcement remain pending authorization.
+
+All 60 tests, original-test checksum, version agreement, source audit, signed app build, and update-signature rejection checks pass locally. Live UI and helper-upgrade verification are tracked separately from these results.

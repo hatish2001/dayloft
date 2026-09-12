@@ -75,6 +75,54 @@ static BOOL failScheduledStart;
     [s setValue:[NSDate dateWithTimeIntervalSinceNow:3600] forKey:@"BlockEndDate"];
     [s setValue:@[@"example.org"] forKey:@"ActiveBlocklist"];
 }
+- (void)testScheduleChangesAreRejectedDuringFocusAndBreakWithoutChangingSession {
+    [self makeActiveSession];
+    SCSettings* s = SCSettings.sharedSettings;
+    NSArray* previous = @[@{@"id": @"existing", @"enabled": @YES}];
+    [s setValue:previous forKey:@"DayloftRecurringSchedules"];
+    NSDate* end = [s valueForKey:@"BlockEndDate"];
+    for (NSNumber* paused in @[@NO, @YES]) {
+        [s setValue:paused forKey:@"BlockPausedForBreak"];
+        __block NSUInteger replies = 0;
+        [SCDaemonBlockMethods setRecurringSchedules:@[] controllingUID:501 blockSettings:@{} authorization:NSData.data reply:^(NSError* error) {
+            replies++; XCTAssertEqualObjects(error.domain, @"Dayloft"); XCTAssertEqual(error.code, 2);
+        }];
+        XCTAssertEqual(replies, 1u);
+        XCTAssertEqualObjects([s valueForKey:@"DayloftRecurringSchedules"], previous);
+        XCTAssertEqualObjects([s valueForKey:@"BlockEndDate"], end);
+        XCTAssertTrue([s boolForKey:@"BlockIsRunning"]);
+        XCTAssertEqualObjects([s valueForKey:@"ActiveBlocklist"], @[@"example.org"]);
+        XCTAssertTrue([SCDaemonBlockMethods.daemonMethodLock tryLock]);
+        [SCDaemonBlockMethods.daemonMethodLock unlock];
+    }
+    XCTAssertEqual(self.clearCalls, 0u);
+}
+- (void)testDeletingLastScheduleAfterSessionEndsPersistsAnAuthoritativeEmptyList {
+    [self makeActiveSession];
+    [SCSettings.sharedSettings setValue:NSDate.distantPast forKey:@"BlockEndDate"];
+    [SCDaemonBlockMethods checkupBlock];
+    __block NSUInteger replies = 0;
+    [SCDaemonBlockMethods setRecurringSchedules:@[] controllingUID:501 blockSettings:@{} authorization:NSData.data reply:^(NSError* error) {
+        replies++; XCTAssertNil(error);
+    }];
+    XCTAssertEqual(replies, 1u);
+    XCTAssertTrue([SCSettings.sharedSettings boolForKey:@"DayloftSchedulesConfigured"]);
+    XCTAssertEqualObjects([SCSettings.sharedSettings valueForKey:@"DayloftRecurringSchedules"], @[]);
+}
+- (void)testFailedScheduleSaveRestoresConfigurationAndError {
+    SCSettings* s = SCSettings.sharedSettings;
+    [s setValue:@"Existing error" forKey:@"DayloftScheduleLastError"];
+    self.persistenceError = [NSError errorWithDomain:@"TestDiskFailure" code:1 userInfo:nil];
+    __block NSUInteger replies = 0;
+    [SCDaemonBlockMethods setRecurringSchedules:@[] controllingUID:501 blockSettings:@{@"Mode": @"New"} authorization:NSData.data reply:^(NSError* error) {
+        replies++; XCTAssertEqualObjects(error, self.persistenceError);
+    }];
+    XCTAssertEqual(replies, 1u);
+    XCTAssertFalse([s boolForKey:@"DayloftSchedulesConfigured"]);
+    XCTAssertEqualObjects([s valueForKey:@"DayloftScheduleSettings"], @{});
+    XCTAssertEqualObjects([s valueForKey:@"DayloftScheduleUID"], @0);
+    XCTAssertEqualObjects([s valueForKey:@"DayloftScheduleLastError"], @"Existing error");
+}
 - (void)testStartNeverInstallsRulesWithoutDurableEndTime {
     self.persistenceError = [NSError errorWithDomain:@"TestDiskFailure" code:1 userInfo:nil];
     __block NSUInteger replies = 0;
@@ -98,6 +146,20 @@ static BOOL failScheduledStart;
         XCTAssertTrue([SCDaemonBlockMethods.daemonMethodLock tryLock]);
         [SCDaemonBlockMethods.daemonMethodLock unlock];
     }
+}
+- (void)testAddingSitesDuringBreakPreservesExistingListAndBreak {
+    [self makeActiveSession];
+    SCSettings* s = SCSettings.sharedSettings;
+    NSDate* breakEnd = [NSDate dateWithTimeIntervalSinceNow:300];
+    [s setValue:@YES forKey:@"BlockPausedForBreak"];
+    [s setValue:breakEnd forKey:@"BreakEndDate"];
+    __block NSUInteger replies = 0;
+    [SCDaemonBlockMethods updateBlocklist:@[@"x.com", @"tiktok.com"] authorization:[NSData data] reply:^(NSError* error) { replies++; XCTAssertNil(error); }];
+    XCTAssertEqual(replies, 1u);
+    XCTAssertEqualObjects([s valueForKey:@"ActiveBlocklist"], (@[@"example.org", @"x.com", @"tiktok.com"]));
+    XCTAssertTrue([s boolForKey:@"BlockPausedForBreak"]);
+    XCTAssertEqualObjects([s valueForKey:@"BreakEndDate"], breakEnd);
+    XCTAssertEqual(self.clearCalls, 0u);
 }
 - (void)testFailedExtensionPersistenceRestoresOriginalEnd {
     [self makeActiveSession];

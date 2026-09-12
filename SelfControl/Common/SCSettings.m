@@ -99,6 +99,7 @@ NSString* const SETTINGS_FILE_DIR = @"/usr/local/etc/";
         @"ScheduledBlockControllingUID": @0,
         @"ScheduledBlockLastError": @"",
         @"DayloftRecurringSchedules": @[],
+        @"DayloftSchedulesConfigured": @NO,
         @"DayloftScheduleSettings": @{},
         @"DayloftScheduleUID": @0,
         @"DayloftScheduleOccurrences": @{},

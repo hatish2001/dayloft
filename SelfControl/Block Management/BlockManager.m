@@ -343,6 +343,15 @@
 
 		[newHosts addObjectsFromArray: facebookIPs];
 	}
+    if (!isAllowlist && (belongsTo(@"x.com") || belongsTo(@"twitter.com"))) {
+        base = @"x.com";
+        [newHosts addObjectsFromArray:@[@"x.com", @"www.x.com", @"mobile.x.com", @"api.x.com",
+            @"twitter.com", @"www.twitter.com", @"mobile.twitter.com", @"api.twitter.com"]];
+    }
+    if (!isAllowlist && belongsTo(@"tiktok.com")) {
+        base = @"tiktok.com";
+        [newHosts addObjectsFromArray:@[@"tiktok.com", @"www.tiktok.com", @"m.tiktok.com", @"vm.tiktok.com", @"vt.tiktok.com", @"web.tiktok.com"]];
+    }
     if (belongsTo(@"twitter.com")) {
         [newHosts addObject: @"api.twitter.com"];
     }

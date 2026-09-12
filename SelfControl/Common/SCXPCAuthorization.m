@@ -73,21 +73,13 @@ static NSDictionary* kAuthorizationRuleAuthenticateAsAdmin2MinTimeout;
     static dispatch_once_t sOnceToken;
     static NSDictionary *  sCommandInfo;
     
-    // static var needs to bre defined before first use
-    if (kAuthorizationRuleAuthenticateAsAdmin2MinTimeout == nil) {
-        kAuthorizationRuleAuthenticateAsAdmin2MinTimeout = @{
-            @"class": @"user",
-            @"group": @"admin",
-            @"timeout": @(120), // 2 minutes
-            @"shared": @(YES),
-            @"version": @1, // not entirely sure what this does TBH
-            // Enable Touch ID and other biometric authentication on macOS 10.12.2+
-            // The authenticate mechanism supports Touch ID when available
-            @"mechanisms": @[@"builtin:authenticate"]
-        };
-    }
-    
     dispatch_once(&sOnceToken, ^{
+        // Leave the authentication mechanisms to macOS. Supplying only its UI
+        // mechanism skips privileged credential verification and loops forever.
+        kAuthorizationRuleAuthenticateAsAdmin2MinTimeout = @{
+            @"class": @"user", @"group": @"admin", @"authenticate-user": @YES,
+            @"allow-root": @NO, @"shared": @YES, @"timeout": @120, @"version": @2
+        };
         #pragma clang diagnostic ignored "-Wundeclared-selector"
         
         
@@ -95,7 +87,7 @@ static NSDictionary* kAuthorizationRuleAuthenticateAsAdmin2MinTimeout;
             kCommandKeyAuthRightName    : @"org.dayloft.Dayloft.startBlock",
             kCommandKeyAuthRightDefault : kAuthorizationRuleAuthenticateAsAdmin2MinTimeout,
             kCommandKeyAuthRightDesc    : NSLocalizedString(
-                @"SelfControl needs your username and password to start the block.",
+                @"Dayloft needs authorization to start a focus session.",
                 @"prompt shown when user is required to authorize to start block"
             )
         };
@@ -103,7 +95,7 @@ static NSDictionary* kAuthorizationRuleAuthenticateAsAdmin2MinTimeout;
             kCommandKeyAuthRightName    : @"org.dayloft.Dayloft.modifyBlock",
             kCommandKeyAuthRightDefault : kAuthorizationRuleAuthenticateAsAdmin2MinTimeout,
             kCommandKeyAuthRightDesc    : NSLocalizedString(
-                @"SelfControl needs your username and password to modify the block",
+                @"Dayloft needs authorization to change your focus session.",
                 @"prompt shown when user is required to authorize to modify their block"
             )
         };
@@ -152,33 +144,32 @@ static NSDictionary* kAuthorizationRuleAuthenticateAsAdmin2MinTimeout;
     }];
 }
 
-+ (void)setupAuthorizationRights:(AuthorizationRef)authRef
-    // See comment in header.
-{
-    assert(authRef != NULL);
-    [SCXPCAuthorization enumerateRightsUsingBlock:^(NSString * authRightName, id authRightDefault, NSString * authRightDesc) {
-        OSStatus    blockErr;
-        
-        // First get the right.  If we get back errAuthorizationDenied that means there's
-        // no current definition, so we add our default one.
-        
-        blockErr = AuthorizationRightGet([authRightName UTF8String], NULL);
-        if (blockErr == errAuthorizationDenied) {
-            NSLog(@"setting auth right default for %@: %@", authRightName, authRightDefault);
-            blockErr = AuthorizationRightSet(
-                authRef,                                    // authRef
-                [authRightName UTF8String],                 // rightName
-                (__bridge CFTypeRef) authRightDefault,      // rightDefinition
-                (__bridge CFStringRef) authRightDesc,       // descriptionKey
-                NULL,                                       // bundle (NULL implies main bundle)
-                CFSTR("SCXPCAuthorization")                             // localeTableName
-            );
-            assert(blockErr == errAuthorizationSuccess);
-        } else {
-            // A right already exists (err == noErr) or any other error occurs, we
-            // assume that it has been set up in advance by the system administrator or
-            // this is the second time we've run.  Either way, there's nothing more for
-            // us to do.
+// Only migrate our exact broken v1 rule. Preserve administrator-customized rules.
++ (BOOL)requiresAuthenticationRepair:(NSDictionary*)rule {
+    return [rule[@"identifier"] isEqual:@"org.dayloft.Dayloft"] &&
+        [rule[@"class"] isEqual:@"user"] && [rule[@"group"] isEqual:@"admin"] &&
+        [rule[@"version"] isEqual:@1] && [rule[@"timeout"] isEqual:@120] &&
+        [rule[@"shared"] boolValue] && [rule[@"authenticate-user"] boolValue] &&
+        ![rule[@"allow-root"] boolValue] && ![rule[@"session-owner"] boolValue] &&
+        [rule[@"mechanisms"] isEqual:@[@"builtin:authenticate"]];
+}
+
++ (void)setupAuthorizationRights:(AuthorizationRef)authRef {
+    if (authRef == NULL) return;
+    NSMutableSet* configured = [NSMutableSet new];
+    [self enumerateRightsUsingBlock:^(NSString* name, id definition, NSString* description) {
+        if ([configured containsObject:name]) return;
+        [configured addObject:name];
+        CFDictionaryRef existing = NULL;
+        OSStatus status = AuthorizationRightGet(name.UTF8String, &existing);
+        BOOL repair = status == errAuthorizationSuccess && [self requiresAuthenticationRepair:(__bridge NSDictionary*)existing];
+        if (existing) CFRelease(existing);
+        if (status == errAuthorizationDenied || repair) {
+            status = AuthorizationRightSet(authRef, name.UTF8String, (__bridge CFTypeRef)definition,
+                (__bridge CFStringRef)description, NULL, CFSTR("SCXPCAuthorization"));
+            if (status != errAuthorizationSuccess) {
+                NSLog(@"Unable to configure Dayloft authorization right %@ (status %d)", name, (int)status);
+            }
         }
     }];
 }

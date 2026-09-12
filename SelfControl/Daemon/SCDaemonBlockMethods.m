@@ -25,21 +25,31 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
 
 + (void)setRecurringSchedules:(NSArray<NSDictionary*>*)schedules controllingUID:(uid_t)controllingUID blockSettings:(NSDictionary*)blockSettings authorization:(NSData*)authData reply:(void(^)(NSError* error))reply {
     if (![self lockOrTimeout:reply]) return;
+    if ([SCBlockUtilities anyBlockIsRunning]) {
+        [self.daemonMethodLock unlock];
+        reply([NSError errorWithDomain:@"Dayloft" code:2 userInfo:@{NSLocalizedDescriptionKey:@"Schedule changes unlock when your focus session ends."}]);
+        return;
+    }
     if (![SCRecurringSchedule validateSchedules:schedules] || ![blockSettings isKindOfClass:NSDictionary.class]) {
         [self.daemonMethodLock unlock];
         reply([NSError errorWithDomain:@"Dayloft" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Choose valid times, days, and websites for each enabled schedule."}]);
         return;
     }
     SCSettings* settings = [SCSettings sharedSettings];
+    id previousConfigured = [settings valueForKey:@"DayloftSchedulesConfigured"];
+    id previousError = [settings valueForKey:@"DayloftScheduleLastError"];
     NSArray* previous = [settings valueForKey:@"DayloftRecurringSchedules"];
     NSDictionary* previousSettings = [settings valueForKey:@"DayloftScheduleSettings"];
     id previousUID = [settings valueForKey:@"DayloftScheduleUID"];
+    [settings setValue:@YES forKey:@"DayloftSchedulesConfigured"];
     [settings setValue:schedules forKey:@"DayloftRecurringSchedules"];
     [settings setValue:blockSettings forKey:@"DayloftScheduleSettings"];
     [settings setValue:@(controllingUID) forKey:@"DayloftScheduleUID"];
     [settings setValue:@"" forKey:@"DayloftScheduleLastError"];
     NSError* error = [settings syncSettingsAndWait:5];
     if (error) {
+        [settings setValue:previousConfigured forKey:@"DayloftSchedulesConfigured"];
+        [settings setValue:previousError forKey:@"DayloftScheduleLastError"];
         [settings setValue:previous forKey:@"DayloftRecurringSchedules"];
         [settings setValue:previousSettings forKey:@"DayloftScheduleSettings"];
         [settings setValue:previousUID forKey:@"DayloftScheduleUID"];
@@ -328,6 +338,23 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         NSLog(@"WARNING: Active blocklist has removed items; these will not be updated. Removed items are %@", removed);
     }
     
+    if ([settings boolForKey:@"BlockPausedForBreak"]) {
+        // During a break the rule files are intentionally absent. Save additions
+        // for the normal resume path without restoring rules ahead of time.
+        NSMutableOrderedSet* combined = [NSMutableOrderedSet orderedSetWithArray:activeBlocklist];
+        [combined addObjectsFromArray:added];
+        [settings setValue:combined.array forKey:@"ActiveBlocklist"];
+        NSError* error = [settings syncSettingsAndWait:5];
+        if (error) {
+            [settings setValue:activeBlocklist forKey:@"ActiveBlocklist"];
+            [settings syncSettingsAndWait:5];
+        }
+        [SCHelperToolUtilities sendConfigurationChangedNotification];
+        [self.daemonMethodLock unlock];
+        reply(error);
+        return;
+    }
+
     BlockManager* blockManager = [[BlockManager alloc] initAsAllowlist: [settings boolForKey: @"ActiveBlockAsWhitelist"]
                                                             allowLocal: [settings boolForKey: @"AllowLocalNetworks"]
                                                includeCommonSubdomains: ([settings boolForKey: @"StrictDomainBlocking"] || [settings boolForKey: @"EvaluateCommonSubdomains"])

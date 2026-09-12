@@ -35,6 +35,7 @@
         @"duration": @([defaults integerForKey:@"BlockDuration"]),
         @"breaks": @([defaults integerForKey:@"BreaksPerBlock"]),
         @"mode": [defaults stringForKey:@"DayloftMode"] ?: @"Living",
+        @"schedulesConfigured": @([settings boolForKey:@"DayloftSchedulesConfigured"]),
         @"schedules": [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[],
         @"sessions": [settings valueForKey:@"DayloftFocusSessions"] ?: @[],
         @"updated": [settings valueForKey:@"LastSettingsUpdate"] ?: NSDate.distantPast,

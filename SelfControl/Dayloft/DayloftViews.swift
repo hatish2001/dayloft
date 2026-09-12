@@ -288,8 +288,24 @@ struct DayloftRootView: View {
                 } label: {
                     Image(systemName: "plus").font(.system(size: 20, weight: .medium)).foregroundStyle(.black)
                         .frame(width: 39, height: 39).background(LinearGradient(colors: [DayloftStyle.blue, DayloftStyle.blue.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
-                }.buttonStyle(.plain).help("Create schedule").accessibilityLabel("Create schedule").keyboardShortcut("n", modifiers: .command)
+                }.buttonStyle(.plain).disabled(model.scheduleChangesLocked || model.saving).help("Create schedule").accessibilityLabel("Create schedule").keyboardShortcut("n", modifiers: .command)
             }.padding(.bottom, 28)
+            if model.scheduleChangesLocked {
+                HStack(spacing: 13) {
+                    Image(systemName: "lock.fill").foregroundStyle(DayloftStyle.blue)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(model.running ? (model.paused ? "Your break is on" : "Focus is on") : "Starting your focus…")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Schedule changes unlock when this session ends.")
+                            .font(.system(size: 11)).foregroundStyle(DayloftStyle.muted)
+                    }
+                    Spacer()
+                    if model.running {
+                        Text(model.countdown).font(.system(size: 17, weight: .medium)).monospacedDigit()
+                    }
+                }.padding(17).background(DayloftStyle.blue.opacity(0.09), in: RoundedRectangle(cornerRadius: 15))
+                    .padding(.bottom, 16).accessibilityIdentifier("dayloft.scheduleSessionStatus")
+            }
             ScrollView {
                 LazyVStack(spacing: 12) {
                     if model.legacyPending {
@@ -300,7 +316,7 @@ struct DayloftRootView: View {
                                 Text(model.legacyDate.formatted()).font(.system(size: 11)).foregroundStyle(DayloftStyle.muted)
                             }
                             Spacer()
-                            Button("Manage") { model.bridge.manageLegacySchedule() }.controlSize(.small)
+                            Button("Manage") { model.bridge.manageLegacySchedule() }.controlSize(.small).disabled(model.scheduleChangesLocked || model.saving)
                         }.padding(16).background(DayloftStyle.panel, in: RoundedRectangle(cornerRadius: 15))
                     }
                     ForEach(model.schedules) { schedule in
@@ -318,13 +334,13 @@ struct DayloftRootView: View {
                                     }
                                     Spacer(minLength: 0)
                                 }.contentShape(Rectangle())
-                            }.buttonStyle(.plain).accessibilityLabel("Edit \(schedule.name)")
+                            }.buttonStyle(.plain).accessibilityLabel("Edit \(schedule.name)").disabled(model.scheduleChangesLocked || model.saving)
                             Toggle(schedule.name, isOn: Binding(get: { schedule.enabled }, set: { enabled in
                                 if enabled && schedule.domains.isEmpty && !schedule.allowlist {
                                     var draft = schedule; draft.enabled = true; editingSchedule = draft
                                 } else { var draft = schedule; draft.enabled = enabled; model.save(draft) }
                             })).labelsHidden().toggleStyle(.switch).tint(DayloftStyle.blue)
-                                .disabled(model.saving).accessibilityLabel("Enable \(schedule.name)")
+                                .disabled(model.scheduleChangesLocked || model.saving).accessibilityLabel("Enable \(schedule.name)")
                         }.padding(.horizontal, 18).padding(.vertical, 14)
                             .background(DayloftStyle.panel, in: RoundedRectangle(cornerRadius: 20))
                             .overlay(RoundedRectangle(cornerRadius: 20).stroke(schedule.enabled ? DayloftStyle.blue.opacity(0.30) : DayloftStyle.line, lineWidth: 1))
@@ -495,7 +511,7 @@ private struct ScheduleEditor: View {
             DomainEditor(text: $domains, allowlist: $draft.allowlist)
             BreakPicker(breaks: $draft.breaks)
             Toggle("Enable this schedule", isOn: $draft.enabled).toggleStyle(.switch).tint(DayloftStyle.blue)
-            Text("Starts automatically, even with Dayloft closed. If you’re already focusing, this schedule waits and runs only until its end time. Turning it off won’t end a block already in progress.")
+            Text("Starts automatically, even with Dayloft closed. If you’re already focusing, this schedule waits and runs only until its end time. Schedule changes are locked while a focus session is running.")
                 .font(.system(size: 11)).foregroundStyle(DayloftStyle.muted).fixedSize(horizontal: false, vertical: true)
             if !validation.isEmpty { Text(validation).font(.system(size: 11)).foregroundStyle(.orange) }
             HStack {
@@ -505,7 +521,8 @@ private struct ScheduleEditor: View {
                 Spacer()
                 if model.saving { ProgressView().controlSize(.small) }
                 Button("Save schedule") { save() }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-            }.disabled(model.saving)
+            }.disabled(model.saving || model.scheduleChangesLocked)
+            if model.scheduleChangesLocked { Text("Your session has started. You can change schedules after it ends.").font(.system(size: 11)).foregroundStyle(DayloftStyle.blue) }
         }.padding(30).frame(width: 470).background(DayloftStyle.background).preferredColorScheme(.dark)
             .interactiveDismissDisabled(model.saving)
             .onAppear { draft = original; domains = draft.domains.joined(separator: "\n") }

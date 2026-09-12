@@ -47,7 +47,7 @@ final class DayloftModel: ObservableObject {
         mode = state["mode"] as? String ?? "Living"
         let remote = (state["schedules"] as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
         let saved = (defaults.array(forKey: "DayloftDraftSchedules") as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
-        schedules = !remote.isEmpty ? remote : (!saved.isEmpty ? saved : DayloftSchedule.starters(domains: domains, allowlist: allowlist))
+        schedules = (state["schedulesConfigured"] as? Bool == true || !remote.isEmpty) ? remote : (!saved.isEmpty ? saved : DayloftSchedule.starters(domains: domains, allowlist: allowlist))
         refresh()
         timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.refresh() }
     }
@@ -63,6 +63,11 @@ final class DayloftModel: ObservableObject {
         legacyDate = state["legacyDate"] as? Date ?? .distantPast
         scheduleError = state["scheduleError"] as? String ?? ""
         enforcementError = state["enforcementError"] as? String ?? ""
+        let remote = (state["schedules"] as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
+        if !saving && (state["schedulesConfigured"] as? Bool == true || !remote.isEmpty) {
+            if schedules != remote { schedules = remote }
+            defaults.set(remote.map(\.dictionary), forKey: "DayloftDraftSchedules")
+        }
         let history = state["sessions"] as? [[String: Any]] ?? []
         activeMode = history.last?["mode"] as? String ?? "Focus"
         let sessions = DayloftFocusSession.recorded(history, userID: getuid(), running: running,
@@ -71,6 +76,7 @@ final class DayloftModel: ObservableObject {
         focusToday = activity.today
         streak = activity.streak
     }
+    var scheduleChangesLocked: Bool { running || busy }
     var countdown: String { Self.clock(max(0, (paused ? breakEnd : end).timeIntervalSince(now))) }
     static func clock(_ seconds: TimeInterval) -> String {
         let value = max(0, Int(seconds))
@@ -107,9 +113,15 @@ final class DayloftModel: ObservableObject {
         commit(schedules.filter { $0.id != schedule.id }, completion: completion)
     }
     private func commit(_ all: [DayloftSchedule], completion: @escaping (Bool) -> Void) {
-        guard !saving else { return }; saving = true
+        refresh()
+        guard !scheduleChangesLocked else {
+            error = "Schedule changes unlock when your focus session ends."
+            completion(false); return
+        }
+        guard !saving else { completion(false); return }; saving = true
         let values = all.map(\.dictionary)
-        let hadRemote = !(bridge.snapshot()["schedules"] as? [[String: Any]] ?? []).isEmpty
+        let state = bridge.snapshot()
+        let hadRemote = state["schedulesConfigured"] as? Bool == true || !(state["schedules"] as? [[String: Any]] ?? []).isEmpty
         // Local inactive drafts need no administrator authorization.
         if !hadRemote && !all.contains(where: \.enabled) {
             schedules = all; defaults.set(values, forKey: "DayloftDraftSchedules"); saving = false; completion(true); return

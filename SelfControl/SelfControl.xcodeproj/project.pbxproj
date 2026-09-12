@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1434E43998B68A6A2C6CA28A /* DomainList.xib in Resources */ = {isa = PBXBuildFile; fileRef = CBBF4E7B1582F7A200E364D9 /* DomainList.xib */; };
+		230E74144824953D987543EE /* SCAuthenticationTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 11EF6350C2FC3876F091D765 /* SCAuthenticationTests.m */; };
 		26142F4FE7128BA51F0A6DCA /* DayloftUpdatePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1487DBFB9ABD28E56DE9EAEA /* DayloftUpdatePolicy.swift */; };
 		4B03129FA6B8BD5C9CAA4999 /* DayloftUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = D133A53E423B1857C8765942 /* DayloftUpdater.swift */; };
 		4CCC92D15683F14357A4222B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = CBBF4E891582F8BD00E364D9 /* InfoPlist.strings */; };
@@ -203,6 +204,7 @@
 		D75EFFE2AFFBB00057103A14 /* SCRecurringSchedule.m in Sources */ = {isa = PBXBuildFile; fileRef = A19620879B6B2FAE02A3A043 /* SCRecurringSchedule.m */; };
 		DC4DBA9148D8D67A11899C5E /* Pods_SelfControl.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EBDE7B29D92764A409E4FDA /* Pods_SelfControl.framework */; };
 		E0AD6D96BCC9C87CC40C6E79 /* SCDayloftBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = EE20EC81A623C2C80BD36555 /* SCDayloftBridge.m */; };
+		E9FF69E21346C4EFD057BFEB /* SCXPCAuthorization.m in Sources */ = {isa = PBXBuildFile; fileRef = CB69C4ED25A3FD8A0030CFCD /* SCXPCAuthorization.m */; };
 		F5B8CBEE19EE21C30026F3A5 /* SCTimeIntervalFormatter.m in Sources */ = {isa = PBXBuildFile; fileRef = F5B8CBED19EE21C30026F3A5 /* SCTimeIntervalFormatter.m */; };
 		FC1990B15D32C0AAD2BC6526 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A0B884D9C2D4697BA5A80060 /* ThirdPartyNotices.txt */; };
 		FDA349DBDD78F536572923BF /* DayloftViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394C30126295BB218BDFB557 /* DayloftViews.swift */; };
@@ -510,6 +512,7 @@
 		0DBC04E4688AB582845BEC48 /* SCRecurringSchedule.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = SCRecurringSchedule.h; sourceTree = "<group>"; };
 		0FF65067F0C380C1E5489F46 /* DayloftUpdatePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DayloftUpdatePolicyTests.swift; sourceTree = "<group>"; };
 		1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
+		11EF6350C2FC3876F091D765 /* SCAuthenticationTests.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = SCAuthenticationTests.m; sourceTree = "<group>"; };
 		1487DBFB9ABD28E56DE9EAEA /* DayloftUpdatePolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DayloftUpdatePolicy.swift; sourceTree = "<group>"; };
 		29B97316FDCFA39411CA2CEA /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		29B97324FDCFA39411CA2CEA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
@@ -1663,6 +1666,7 @@
 				EA50D8EEB8E59D046A73E825 /* SCWebsiteBlockingTests.m */,
 				0FF65067F0C380C1E5489F46 /* DayloftUpdatePolicyTests.swift */,
 				4108726200EC03C8A0408FFA /* SCDaemonLifecycleTests.m */,
+				11EF6350C2FC3876F091D765 /* SCAuthenticationTests.m */,
 			);
 			path = SelfControlTests;
 			sourceTree = "<group>";
@@ -3810,6 +3814,8 @@
 				B87E35B6934D1408524EB7A8 /* SCDaemonBlockMethods.m in Sources */,
 				BC591F33E66570DD50B6EF5C /* LaunchctlHelper.m in Sources */,
 				A573C458C8B76A778DA288AE /* SCDaemonLifecycleTests.m in Sources */,
+				E9FF69E21346C4EFD057BFEB /* SCXPCAuthorization.m in Sources */,
+				230E74144824953D987543EE /* SCAuthenticationTests.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4088,7 +4094,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 421;
+				CURRENT_PROJECT_VERSION = 422;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -4127,7 +4133,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 421;
+				CURRENT_PROJECT_VERSION = 422;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -4196,7 +4202,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
-				MARKETING_VERSION = 4.2.1;
+				MARKETING_VERSION = 4.2.2;
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_CODE_SIGN_FLAGS = "-o library,hard,kill,runtime";
 				SDKROOT = macosx;
@@ -4243,7 +4249,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
-				MARKETING_VERSION = 4.2.1;
+				MARKETING_VERSION = 4.2.2;
 				ONLY_ACTIVE_ARCH = NO;
 				OTHER_CODE_SIGN_FLAGS = "-o library,hard,kill,runtime";
 				SDKROOT = macosx;
@@ -4343,7 +4349,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 421;
+				CURRENT_PROJECT_VERSION = 422;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -4391,7 +4397,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 421;
+				CURRENT_PROJECT_VERSION = 422;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GCC_MODEL_TUNING = G5;
@@ -4519,7 +4525,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COPY_PHASE_STRIP = NO;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
-				CURRENT_PROJECT_VERSION = 421;
+				CURRENT_PROJECT_VERSION = 422;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PLATFORM_DIR)/Developer/Library/Frameworks\n\n$(PLATFORM_DIR)/Developer/Library/Frameworks\n\n";
@@ -4554,7 +4560,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				COPY_PHASE_STRIP = NO;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
-				CURRENT_PROJECT_VERSION = 421;
+				CURRENT_PROJECT_VERSION = 422;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_HARDENED_RUNTIME = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(PLATFORM_DIR)/Developer/Library/Frameworks\n\n$(PLATFORM_DIR)/Developer/Library/Frameworks\n\n";

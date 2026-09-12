@@ -184,7 +184,7 @@
         return;
     }
     
-    CFErrorRef cfError;
+    CFErrorRef cfError = NULL;
 
     // in some cases, SMJobBless will fail if we don't first remove the currently running daemon
     // it's not clear why exactly or what the exact cause is, but I can reproduce consistently

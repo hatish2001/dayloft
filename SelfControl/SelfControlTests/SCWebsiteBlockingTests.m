@@ -92,6 +92,23 @@
     [manager markAppending]; manager.firewall.installationStatus = 0; manager.hosts.writeSucceeds = NO;
     XCTAssertFalse([manager finishAppending]);
 }
+- (void)testXAndTikTokSubdomainsProtectTheirParentSites {
+    MemoryBlockManager* manager = [MemoryBlockManager new];
+    [manager addBlockEntryFromString:@"https://mobile.x.com/home"];
+    [manager addBlockEntryFromString:@"https://vm.tiktok.com/example/"];
+    XCTAssertTrue([manager finalizeBlock]);
+    for (NSString* host in @[@"x.com", @"www.x.com", @"twitter.com", @"api.twitter.com", @"tiktok.com", @"www.tiktok.com", @"vm.tiktok.com", @"vt.tiktok.com"]) {
+        XCTAssertTrue([manager.hosts.hosts containsObject:host], @"Missing %@", host);
+    }
+}
+- (void)testSocialAliasesDoNotBroadenAllowlistOrUnrelatedHosts {
+    BlockManager* allow = [[BlockManager alloc] initAsAllowlist:YES];
+    XCTAssertFalse([[allow commonSubdomainsForHostName:@"api.x.com"] containsObject:@"x.com"]);
+    XCTAssertFalse([[allow commonSubdomainsForHostName:@"vm.tiktok.com"] containsObject:@"tiktok.com"]);
+    MemoryBlockManager* deny = [MemoryBlockManager new];
+    XCTAssertFalse([[deny commonSubdomainsForHostName:@"notx.com"] containsObject:@"x.com"]);
+    XCTAssertFalse([[deny commonSubdomainsForHostName:@"nottiktok.com"] containsObject:@"tiktok.com"]);
+}
 - (void)testPastedInstagramURLProtectsParentAndEndpoints {
     MemoryBlockManager* manager = [MemoryBlockManager new];
     [manager addBlockEntryFromString:@"https://www.instagram.com/reels/example/?next=home"];
