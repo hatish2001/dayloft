@@ -24,7 +24,7 @@ The shared daemon lock also now uses thread-safe initialization, start timers ru
 - Universal Release compilation passes; all nine bundled executable/framework binaries contain arm64 and x86_64.
 - Workflow syntax passes actionlint; shell syntax and the public-source audit pass.
 - Sparkle signature generation/verification rejects tampered payloads and mismatched keys. The previous feed-generation smoke test remains documented in VALIDATION.md; this review does not replace a real installed-app update test.
-- Current public CI results are available from the repository's Actions page. The changes must pass there before delivery.
+- The [public review-fix CI run](https://github.com/hatish2001/dayloft/actions/runs/34670738757) passed all tests, both Release architectures, signature checks, and the source audit. Its Node 20 deprecation annotation prompted an additional upgrade of checkout/upload to pinned v7.0.1 Node 24 actions.
 
 ## Remaining launch gates
 
