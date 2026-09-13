@@ -88,6 +88,25 @@ final class DayloftModel: ObservableObject {
         defaults.set(breaks, forKey: "BreaksPerBlock")
         defaults.set(["domains": domains, "allowlist": allowlist], forKey: "DayloftMode.\(mode)")
     }
+    func modeConfiguration(named name: String) -> (domains: [String], allowlist: Bool) {
+        if name == mode { return (domains, allowlist) }
+        let config = defaults.dictionary(forKey: "DayloftMode.\(name)")
+        return (config?["domains"] as? [String] ?? [], config?["allowlist"] as? Bool ?? false)
+    }
+    func saveMode(domains newDomains: [String], allowlist newAllowlist: Bool, completion: @escaping (Bool) -> Void) {
+        guard !running && !busy else { completion(false); return }
+        let previousDomains = domains, previousAllowlist = allowlist
+        let updatedSchedules = DayloftSchedule.applyingMode(mode, domains: newDomains, allowlist: newAllowlist, to: schedules)
+        domains = newDomains; allowlist = newAllowlist; persistConfiguration()
+        guard updatedSchedules != schedules else { completion(true); return }
+        commit(updatedSchedules) { [weak self] success in
+            guard let self else { return }
+            if !success {
+                self.domains = previousDomains; self.allowlist = previousAllowlist; self.persistConfiguration()
+            }
+            completion(success)
+        }
+    }
     func selectMode(_ name: String) {
         persistConfiguration(); mode = name
         let config = defaults.dictionary(forKey: "DayloftMode.\(name)")

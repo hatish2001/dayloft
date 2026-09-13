@@ -57,6 +57,16 @@ struct DayloftSchedule: Identifiable, Codable, Equatable {
             s.domains = domains; s.allowlist = allowlist; return s
         }
     }
+    static func applyingMode(_ mode: String, domains: [String], allowlist: Bool, to schedules: [Self]) -> [Self] {
+        schedules.map { schedule in
+            guard schedule.mode == mode else { return schedule }
+            var updated = schedule
+            updated.domains = domains
+            updated.allowlist = allowlist
+            if updated.enabled && domains.isEmpty && !allowlist { updated.enabled = false }
+            return updated
+        }
+    }
 }
 
 struct DayloftFocusSession {

@@ -4,7 +4,7 @@ Validated locally on Apple silicon with macOS 26 and Xcode 26.6 in September 202
 
 ## Automated checks
 
-- 64 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 14 Swift model tests, 4 settings-isolation/history tests, 19 website-rule/enforcement-result tests, 3 update-policy tests, 3 authentication-policy tests, and 12 daemon lifecycle tests.
+- 67 XCTest tests pass: the 3 unchanged original tests, 6 calendar/schedule tests, 16 Swift model tests, 4 settings-isolation/history tests, 20 website-rule/enforcement-result tests, 3 update-policy tests, 3 authentication-policy tests, and 12 daemon lifecycle tests.
 - The original test file matches its recorded SHA-256 checksum.
 - A fresh public-source copy with newly installed, pinned CocoaPods dependencies builds and passes tests.
 - Both unsigned test bundles and the locally Apple Development-signed app pass resource and embedded-helper identity checks.
@@ -75,3 +75,7 @@ Adding a distraction during focus now saves it in three durable places: the live
 Denylist hostnames, including pasted URLs with explicit ports, are now enforced with exact `/etc/hosts` entries and their known parent/service aliases. They are no longer converted to PF destination-address rules, which could block unrelated websites sharing Google, Meta, Akamai, or Cloudflare infrastructure. Explicit IP and CIDR entries still use PF, and allowlists retain their address-based PF rules. Regression tests cover YouTube and Instagram denylist isolation, port-bearing URLs, and IPv4 and IPv6 literal enforcement.
 
 The helper stays registered with launchd when its idle process exits, so the next action starts it on demand without another privileged installation. Starting focus and saving schedules first check the installed version and install only when the helper is absent or older; concurrent checks in one app share one installation. Test-host launches do not run active-block recovery. Bundle validation asserts the on-demand launchd configuration.
+
+## Mode and schedule consistency repair
+
+Schedules now inherit the website list from their selected focus mode. Saving a mode updates every schedule that uses it before the editor closes, and the schedule editor exposes the mode instead of a second independent website list. This removes the stale-copy path that let a three-site Morning Zen schedule replace a five-site Living configuration at its next automatic start. Website merging also treats `www.example.com` and `example.com` as one entry so adding a site during focus does not inflate the saved count with equivalent spellings.

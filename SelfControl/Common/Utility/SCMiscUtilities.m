@@ -217,6 +217,23 @@
     return cleanedList;
 }
 
++ (NSArray<NSString*>*)blocklistByAddingEntries:(NSArray<NSString*>*)additions toBlocklist:(NSArray<NSString*>*)blocklist {
+    NSMutableArray<NSString*>* merged = [NSMutableArray new];
+    NSMutableSet<NSString*>* identities = [NSMutableSet new];
+    for (NSArray<NSString*>* source in @[blocklist ?: @[], additions ?: @[]]) {
+        for (NSString* rawEntry in source) {
+            for (NSString* entry in [self cleanBlocklistEntry:rawEntry]) {
+                NSString* identity = entry.lowercaseString;
+                if ([identity hasPrefix:@"www."]) identity = [identity substringFromIndex:4];
+                if ([identities containsObject:identity]) continue;
+                [identities addObject:identity];
+                [merged addObject:entry];
+            }
+        }
+    }
+    return merged;
+}
+
 + (NSDictionary*) defaultsDictForUser:(uid_t) controllingUID {
     if (geteuid() != 0) {
         // if we're not root, we can't just get defaults for some arbitrary user

@@ -414,6 +414,7 @@ private struct ModeEditor: View {
     @State private var text = ""
     @State private var allowlist = false
     @State private var validation = ""
+    @State private var pending = false
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
@@ -426,15 +427,21 @@ private struct ModeEditor: View {
             DomainEditor(text: $text, allowlist: $allowlist)
             if !validation.isEmpty { Text(validation).font(.system(size: 12)).foregroundStyle(.orange) }
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(pending)
                 Spacer()
+                if pending { ProgressView().controlSize(.small) }
                 Button("Save mode") {
                     let cleaned = model.bridge.cleanDomains(text)
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && cleaned.isEmpty { validation = "Enter a website like reddit.com or paste its URL."; return }
-                    model.domains = cleaned; model.allowlist = allowlist; model.persistConfiguration(); dismiss()
-                }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+                    pending = true
+                    model.saveMode(domains: cleaned, allowlist: allowlist) { success in
+                        pending = false
+                        if success { dismiss() }
+                    }
+                }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(pending)
             }
         }.padding(30).frame(width: 460).background(DayloftStyle.background).preferredColorScheme(.dark)
+            .interactiveDismissDisabled(pending)
             .onAppear { text = model.domains.joined(separator: "\n"); allowlist = model.allowlist }
     }
 }
@@ -465,7 +472,6 @@ private struct ScheduleEditor: View {
     let original: DayloftSchedule
     @Environment(\.dismiss) var dismiss
     @State private var draft = DayloftSchedule()
-    @State private var domains = ""
     @State private var validation = ""
     @State private var confirmDelete = false
     var body: some View {
@@ -480,6 +486,14 @@ private struct ScheduleEditor: View {
                     ForEach(["☕️", "🎯", "📚", "🎨", "🌙", "📵", "🌿", "✨"], id: \.self) { Text($0).tag($0) }
                 }.labelsHidden().frame(width: 65)
                 TextField("Schedule name", text: $draft.name).textFieldStyle(.roundedBorder).font(.system(size: 16)).accessibilityIdentifier("dayloft.scheduleName")
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Focus mode", selection: $draft.mode) {
+                    ForEach(model.modes, id: \.self) { Text($0).tag($0) }
+                }.pickerStyle(.menu)
+                let configuration = model.modeConfiguration(named: draft.mode)
+                Text("Uses \(configuration.domains.count) websites from \(draft.mode). Edit the mode from Home to update every schedule that uses it.")
+                    .font(.system(size: 11)).foregroundStyle(DayloftStyle.muted)
             }
             HStack {
                 timePicker("From", minute: $draft.startMinute)
@@ -508,7 +522,6 @@ private struct ScheduleEditor: View {
                     }
                 }
             }
-            DomainEditor(text: $domains, allowlist: $draft.allowlist)
             BreakPicker(breaks: $draft.breaks)
             Toggle("Enable this schedule", isOn: $draft.enabled).toggleStyle(.switch).tint(DayloftStyle.blue)
             Text("Starts automatically, even with Dayloft closed. If you’re already focusing, this schedule waits and runs only until its end time. Schedule changes are locked while a focus session is running.")
@@ -525,7 +538,7 @@ private struct ScheduleEditor: View {
             if model.scheduleChangesLocked { Text("Your session has started. You can change schedules after it ends.").font(.system(size: 11)).foregroundStyle(DayloftStyle.blue) }
         }.padding(30).frame(width: 470).background(DayloftStyle.background).preferredColorScheme(.dark)
             .interactiveDismissDisabled(model.saving)
-            .onAppear { draft = original; domains = draft.domains.joined(separator: "\n") }
+            .onAppear { draft = original }
             .confirmationDialog("Delete \(draft.name)?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete schedule", role: .destructive) { model.delete(original) { if $0 { dismiss() } } }
             } message: { Text("This removes future sessions. A block already running will finish normally.") }
@@ -546,9 +559,10 @@ private struct ScheduleEditor: View {
         guard !draft.name.isEmpty else { validation = "Give your schedule a name."; return }
         guard !draft.days.isEmpty else { validation = "Choose at least one day."; return }
         guard draft.startMinute != draft.endMinute else { validation = "Choose a different end time."; return }
-        draft.domains = model.bridge.cleanDomains(domains)
+        let configuration = model.modeConfiguration(named: draft.mode)
+        draft.domains = configuration.domains
+        draft.allowlist = configuration.allowlist
         if draft.enabled && draft.domains.isEmpty && !draft.allowlist { validation = "Add a website before enabling this schedule."; return }
-        if !domains.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && draft.domains.isEmpty { validation = "Enter a valid website or URL."; return }
         model.save(draft) { if $0 { dismiss() } }
     }
 }

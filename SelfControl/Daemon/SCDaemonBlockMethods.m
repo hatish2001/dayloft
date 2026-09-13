@@ -33,14 +33,13 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
             [updated addObject:original];
             continue;
         }
-        NSMutableOrderedSet* domains = [NSMutableOrderedSet orderedSetWithArray:original[@"domains"] ?: @[]];
-        [domains addObjectsFromArray:sites];
-        if ([domains.array isEqualToArray:original[@"domains"] ?: @[]]) {
+        NSArray* domains = [SCMiscUtilities blocklistByAddingEntries:sites toBlocklist:original[@"domains"] ?: @[]];
+        if ([domains isEqualToArray:original[@"domains"] ?: @[]]) {
             [updated addObject:original];
             continue;
         }
         NSMutableDictionary* schedule = [original mutableCopy];
-        schedule[@"domains"] = domains.array;
+        schedule[@"domains"] = domains;
         [updated addObject:schedule];
     }
     return updated;
@@ -364,11 +363,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     if ([settings boolForKey:@"BlockPausedForBreak"]) {
         // During a break the rule files are intentionally absent. Save additions
         // for the normal resume path without restoring rules ahead of time.
-        NSMutableOrderedSet* combined = [NSMutableOrderedSet orderedSetWithArray:activeBlocklist];
-        [combined addObjectsFromArray:added];
+        NSArray* combined = [SCMiscUtilities blocklistByAddingEntries:added toBlocklist:activeBlocklist];
         NSArray* previousSchedules = [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[];
-        NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:combined.array];
-        [settings setValue:combined.array forKey:@"ActiveBlocklist"];
+        NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:combined];
+        [settings setValue:combined forKey:@"ActiveBlocklist"];
         if (![updatedSchedules isEqualToArray:previousSchedules]) [settings setValue:updatedSchedules forKey:@"DayloftRecurringSchedules"];
         NSError* error = [settings syncSettingsAndWait:5];
         if (error) {
@@ -399,11 +397,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     }
     // Active denylist updates may only add destinations. Retain omitted entries
     // in persisted state so recovery/restart cannot accidentally unblock them.
-    NSMutableOrderedSet* effectiveList = [NSMutableOrderedSet orderedSetWithArray:activeBlocklist];
-    [effectiveList addObjectsFromArray:added];
+    NSArray* effectiveList = [SCMiscUtilities blocklistByAddingEntries:added toBlocklist:activeBlocklist];
     NSArray* previousSchedules = [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[];
-    NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:effectiveList.array];
-    [settings setValue:effectiveList.array forKey:@"ActiveBlocklist"];
+    NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:effectiveList];
+    [settings setValue:effectiveList forKey:@"ActiveBlocklist"];
     if (![updatedSchedules isEqualToArray:previousSchedules]) [settings setValue:updatedSchedules forKey:@"DayloftRecurringSchedules"];
     
     // make sure everyone knows about our new list

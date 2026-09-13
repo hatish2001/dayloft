@@ -24,6 +24,10 @@
 
 + (NSArray<NSString*>*)cleanBlocklist:(NSArray<NSString*>*)blocklist;
 
+// Adds cleaned entries while treating www.example.com and example.com as the
+// same website. The first spelling is retained for stable display ordering.
++ (NSArray<NSString*>*)blocklistByAddingEntries:(NSArray<NSString*>*)additions toBlocklist:(NSArray<NSString*>*)blocklist;
+
 + (NSDictionary*) defaultsDictForUser:(uid_t)controllingUID;
 
 + (NSArray<NSURL*>*)allUserHomeDirectoryURLs:(NSError**)errPtr;

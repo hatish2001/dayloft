@@ -38,6 +38,19 @@ final class DayloftModelTests: XCTestCase {
         XCTAssertTrue(schedules.allSatisfy { !$0.enabled && $0.domains == ["example.com"] })
         XCTAssertEqual(Set(schedules.map(\.id)).count, schedules.count)
     }
+    func testApplyingModeReplacesOnlySchedulesUsingThatMode() {
+        var living = DayloftSchedule(); living.mode = "Living"; living.domains = ["old.example"]
+        var offline = DayloftSchedule(); offline.mode = "Offline"; offline.domains = ["keep.example"]
+        let updated = DayloftSchedule.applyingMode("Living", domains: ["x.com", "tiktok.com"], allowlist: false, to: [living, offline])
+        XCTAssertEqual(updated[0].domains, ["x.com", "tiktok.com"])
+        XCTAssertEqual(updated[1], offline)
+    }
+    func testClearingDenylistModeDisablesItsEnabledSchedules() {
+        var living = DayloftSchedule(); living.mode = "Living"; living.enabled = true; living.domains = ["old.example"]
+        let updated = DayloftSchedule.applyingMode("Living", domains: [], allowlist: false, to: [living])
+        XCTAssertFalse(updated[0].enabled)
+        XCTAssertTrue(updated[0].domains.isEmpty)
+    }
     func testOverlappingBreaksAreOnlySubtractedOnce() {
         let start = Date(timeIntervalSince1970: 100_000)
         let s = DayloftFocusSession(start: start, end: start.addingTimeInterval(600), breaks: [

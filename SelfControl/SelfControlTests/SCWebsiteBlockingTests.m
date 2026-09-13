@@ -128,6 +128,11 @@
     XCTAssertTrue([manager.hosts.hosts containsObject:@"youtube.com"]);
     XCTAssertTrue([manager.hosts.hosts containsObject:@"instagram.com"]);
 }
+- (void)testWebsiteMergingDoesNotDuplicateWWWForms {
+    NSArray* merged = [SCMiscUtilities blocklistByAddingEntries:@[@"x.com", @"https://www.tiktok.com/video/1", @"Example.COM"]
+                                                     toBlocklist:@[@"www.x.com", @"tiktok.com"]];
+    XCTAssertEqualObjects(merged, (@[@"www.x.com", @"tiktok.com", @"example.com"]));
+}
 - (void)testDenylistURLWithExplicitPortStillBlocksItsHostname {
     MemoryBlockManager* manager = [MemoryBlockManager new];
     [manager addBlockEntryFromString:@"https://example.com:8443/private"];
