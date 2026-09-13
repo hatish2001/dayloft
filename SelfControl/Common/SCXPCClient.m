@@ -23,6 +23,40 @@
 
 @end
 
+static NSDictionary* SCSigningInfoForURL(NSURL* codeURL) {
+    SecStaticCodeRef staticCode = NULL;
+    OSStatus status = SecStaticCodeCreateWithPath((__bridge CFURLRef)codeURL, kSecCSDefaultFlags, &staticCode);
+    if (status != errSecSuccess || staticCode == NULL) return nil;
+
+    status = SecStaticCodeCheckValidity(staticCode, kSecCSStrictValidate | kSecCSCheckAllArchitectures, NULL);
+    if (status != errSecSuccess) {
+        CFRelease(staticCode);
+        return nil;
+    }
+
+    CFDictionaryRef signingInfo = NULL;
+    status = SecCodeCopySigningInformation(staticCode, kSecCSSigningInformation, &signingInfo);
+    CFRelease(staticCode);
+    if (status != errSecSuccess || signingInfo == NULL) return nil;
+    return CFBridgingRelease(signingInfo);
+}
+
+static BOOL SCBundleCanInstallEmbeddedDaemon(void) {
+    NSURL* appURL = NSBundle.mainBundle.bundleURL;
+    NSURL* helperURL = [appURL URLByAppendingPathComponent:@"Contents/Library/LaunchServices/org.dayloft.focusd"];
+    NSDictionary* appInfo = SCSigningInfoForURL(appURL);
+    NSDictionary* helperInfo = SCSigningInfoForURL(helperURL);
+    NSString* appTeam = appInfo[(__bridge NSString*)kSecCodeInfoTeamIdentifier];
+    NSString* helperTeam = helperInfo[(__bridge NSString*)kSecCodeInfoTeamIdentifier];
+    NSString* appIdentifier = appInfo[(__bridge NSString*)kSecCodeInfoIdentifier];
+    NSString* helperIdentifier = helperInfo[(__bridge NSString*)kSecCodeInfoIdentifier];
+
+    return appTeam.length > 0 &&
+        [appTeam isEqualToString:helperTeam] &&
+        [appIdentifier isEqualToString:@"org.dayloft.Dayloft"] &&
+        [helperIdentifier isEqualToString:@"org.dayloft.focusd"];
+}
+
 @implementation SCXPCClient
 
 - (void)setupAuthorization {
@@ -159,6 +193,15 @@
 }
 
 - (void)installDaemon:(void(^)(NSError*))callback {
+    // Do not remove a working helper on behalf of an ad-hoc or incomplete
+    // development build. SMJobBless cannot install that replacement, so the
+    // old remove-first sequence could leave launchd unregistered.
+    if (!SCBundleCanInstallEmbeddedDaemon()) {
+        NSLog(@"ERROR: Refusing helper installation because the app and embedded helper do not have matching trusted signatures.");
+        callback([SCErr errorWithCode:502]);
+        return;
+    }
+
     // make sure authorization is set up (if we haven't connected yet)
     [self setupAuthorization];
     
@@ -206,28 +249,39 @@
     
     CFErrorRef cfError = NULL;
 
-    // in some cases, SMJobBless will fail if we don't first remove the currently running daemon
-    // it's not clear why exactly or what the exact cause is, but I can reproduce consistently
-    // by running a 100-site whitelist block, then immediately trying to start another block
-    // I consistently get the error (CFErrorDomainLaunchd error 2)
-    SILENCE_OSX10_10_DEPRECATION(
-    SMJobRemove(kSMDomainSystemLaunchd, CFSTR("org.dayloft.focusd"), self->_authRef, YES, &cfError);
-                                 );
-    if (cfError) {
-        NSLog(@"WARNING: Failed to remove existing selfcontrold daemon with error %@", cfError);
-        cfError = NULL;
-    }
-
     BOOL result = (BOOL)SMJobBless(
                                    kSMDomainSystemLaunchd,
                                    CFSTR("org.dayloft.focusd"),
                                    self->_authRef,
                                    &cfError);
 
+    NSError* firstBlessError = CFBridgingRelease(cfError);
+    cfError = NULL;
+
+    // A stale registered job can make the first bless fail with launchd error
+    // 2. Only that known state justifies removing the old registration. Retry
+    // immediately so unrelated signing failures cannot destroy a good helper.
+    if (!result && [firstBlessError.domain isEqualToString:@"CFErrorDomainLaunchd"] && firstBlessError.code == 2) {
+        NSLog(@"WARNING: Retrying helper installation after stale launchd registration: %@", firstBlessError);
+        CFErrorRef removeError = NULL;
+        SILENCE_OSX10_10_DEPRECATION(
+        SMJobRemove(kSMDomainSystemLaunchd, CFSTR("org.dayloft.focusd"), self->_authRef, YES, &removeError);
+                                     );
+        if (removeError != NULL) {
+            NSError* error = CFBridgingRelease(removeError);
+            NSLog(@"WARNING: Failed to remove stale Dayloft helper registration: %@", error);
+        }
+        result = (BOOL)SMJobBless(
+                                   kSMDomainSystemLaunchd,
+                                   CFSTR("org.dayloft.focusd"),
+                                   self->_authRef,
+                                   &cfError);
+    }
+
     if(!result) {
-        NSError* error = CFBridgingRelease(cfError);
+        NSError* error = cfError != NULL ? CFBridgingRelease(cfError) : firstBlessError;
         
-        NSLog(@"WARNING: Authorized installation of selfcontrold returned failure status code %d and error %@", (int)status, error);
+        NSLog(@"WARNING: Authorized installation of Dayloft helper returned failure status code %d and error %@", (int)status, error);
 
         NSError* err = [SCErr errorWithCode: 500 subDescription: error.localizedDescription];
         if (![SCMiscUtilities errorIsAuthCanceled: error]) {

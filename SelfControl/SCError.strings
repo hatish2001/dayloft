@@ -47,8 +47,9 @@
 "404" = "The killer helper tool couldn't launch because it was provided an invalid key date.";
 
 // 500-599 = errors generated in the XPC client
-"500" = "There was an error trying to install SelfControl's helper tool: %@";
-"501" = "There was an error authorizing the installation of SelfControl's helper tool.";
+"500" = "There was an error trying to install Dayloft's helper tool: %@";
+"501" = "There was an error authorizing the installation of Dayloft's helper tool.";
+"502" = "This copy of Dayloft cannot install its helper safely. Open the signed Dayloft app from Applications and try again.";
 
 // 600-699 = errors generated in SCSettings
 "600" = "Unable to write SCSettings from a normal (non-root) account.";
