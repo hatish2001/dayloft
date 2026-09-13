@@ -38,6 +38,7 @@
         @"mode": [defaults stringForKey:@"DayloftMode"] ?: @"Living",
         @"schedulesConfigured": @([settings boolForKey:@"DayloftSchedulesConfigured"]),
         @"schedules": [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[],
+        @"modeConfigurations": [settings valueForKey:@"DayloftModeConfigurations"] ?: @{},
         @"sessions": [settings valueForKey:@"DayloftFocusSessions"] ?: @[],
         @"updated": [settings valueForKey:@"LastSettingsUpdate"] ?: NSDate.distantPast,
         @"enforcementError": [settings valueForKey:@"DayloftEnforcementError"] ?: @"",
@@ -74,13 +75,15 @@
             // Adding a distraction while focused means it should be there next
             // time too. The daemon mirrors it to future denylist schedules.
             NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
-            NSArray<NSString*>* saved = [SCMiscUtilities blocklistByAddingEntries:additions toBlocklist:[defaults arrayForKey:@"Blocklist"] ?: @[]];
-            [defaults setObject:saved forKey:@"Blocklist"];
-            NSString* mode = [defaults stringForKey:@"DayloftMode"] ?: @"Living";
+            NSString* selectedMode = [defaults stringForKey:@"DayloftMode"] ?: @"Living";
+            NSString* mode = [[SCSettings.sharedSettings valueForKey:@"ActiveDayloftMode"] isKindOfClass:NSString.class] ? [SCSettings.sharedSettings valueForKey:@"ActiveDayloftMode"] : @"";
+            if (mode.length == 0) mode = selectedMode;
+            NSArray<NSString*>* saved = domains;
             NSMutableDictionary* modeSettings = [[defaults dictionaryForKey:[@"DayloftMode." stringByAppendingString:mode]] mutableCopy] ?: [NSMutableDictionary new];
             modeSettings[@"domains"] = saved;
             modeSettings[@"allowlist"] = @NO;
             [defaults setObject:modeSettings forKey:[@"DayloftMode." stringByAppendingString:mode]];
+            if ([mode isEqualToString:selectedMode]) [defaults setObject:saved forKey:@"Blocklist"];
             [defaults synchronize];
         }
         dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });

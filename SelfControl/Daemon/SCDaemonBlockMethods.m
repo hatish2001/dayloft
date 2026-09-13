@@ -52,7 +52,10 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         reply([NSError errorWithDomain:@"Dayloft" code:2 userInfo:@{NSLocalizedDescriptionKey:@"Schedule changes unlock when your focus session ends."}]);
         return;
     }
-    if (![SCRecurringSchedule validateSchedules:schedules] || ![blockSettings isKindOfClass:NSDictionary.class]) {
+    BOOL validBlockSettings = [blockSettings isKindOfClass:NSDictionary.class];
+    id modeConfigurations = validBlockSettings ? blockSettings[@"DayloftModeConfigurations"] : nil;
+    if (![SCRecurringSchedule validateSchedules:schedules] || !validBlockSettings ||
+        (modeConfigurations != nil && ![SCRecurringSchedule validateModeConfigurations:modeConfigurations])) {
         [self.daemonMethodLock unlock];
         reply([NSError errorWithDomain:@"Dayloft" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Choose valid times, days, and websites for each enabled schedule."}]);
         return;
@@ -62,10 +65,14 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     id previousError = [settings valueForKey:@"DayloftScheduleLastError"];
     NSArray* previous = [settings valueForKey:@"DayloftRecurringSchedules"];
     NSDictionary* previousSettings = [settings valueForKey:@"DayloftScheduleSettings"];
+    NSDictionary* previousModeConfigurations = [settings valueForKey:@"DayloftModeConfigurations"];
     id previousUID = [settings valueForKey:@"DayloftScheduleUID"];
     [settings setValue:@YES forKey:@"DayloftSchedulesConfigured"];
     [settings setValue:schedules forKey:@"DayloftRecurringSchedules"];
-    [settings setValue:blockSettings forKey:@"DayloftScheduleSettings"];
+    NSMutableDictionary* scheduleSettings = [blockSettings mutableCopy];
+    [scheduleSettings removeObjectForKey:@"DayloftModeConfigurations"];
+    [settings setValue:scheduleSettings forKey:@"DayloftScheduleSettings"];
+    if (modeConfigurations != nil) [settings setValue:modeConfigurations forKey:@"DayloftModeConfigurations"];
     [settings setValue:@(controllingUID) forKey:@"DayloftScheduleUID"];
     [settings setValue:@"" forKey:@"DayloftScheduleLastError"];
     NSError* error = [settings syncSettingsAndWait:5];
@@ -74,6 +81,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         [settings setValue:previousError forKey:@"DayloftScheduleLastError"];
         [settings setValue:previous forKey:@"DayloftRecurringSchedules"];
         [settings setValue:previousSettings forKey:@"DayloftScheduleSettings"];
+        [settings setValue:previousModeConfigurations forKey:@"DayloftModeConfigurations"];
         [settings setValue:previousUID forKey:@"DayloftScheduleUID"];
         [settings syncSettingsAndWait:5];
     }
@@ -217,6 +225,17 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         [self.daemonMethodLock unlock];
         return;
     }
+    if (![blockSettings isKindOfClass:NSDictionary.class]) {
+        reply([NSError errorWithDomain:@"Dayloft" code:3 userInfo:@{NSLocalizedDescriptionKey:@"The focus settings were invalid and the block was not started."}]);
+        [self.daemonMethodLock unlock];
+        return;
+    }
+    id suppliedModeConfigurations = blockSettings[@"DayloftModeConfigurations"];
+    if (suppliedModeConfigurations != nil && ![SCRecurringSchedule validateModeConfigurations:suppliedModeConfigurations]) {
+        reply([NSError errorWithDomain:@"Dayloft" code:3 userInfo:@{NSLocalizedDescriptionKey:@"The saved focus modes were invalid and the block was not started."}]);
+        [self.daemonMethodLock unlock];
+        return;
+    }
     
     // clear any legacy block information - no longer useful and could potentially confuse things
     // but first, copy it over one more time (this should've already happened once in the app, but you never know)
@@ -246,6 +265,8 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     [settings setValue: @5 forKey: @"BreakDurationMinutes"];
     [settings setValue: [NSDate distantPast] forKey: @"BreakEndDate"];
     [settings setValue: @NO forKey: @"BlockPausedForBreak"];
+    [settings setValue:[blockSettings[@"DayloftMode"] isKindOfClass:NSString.class] ? blockSettings[@"DayloftMode"] : @"Focus" forKey:@"ActiveDayloftMode"];
+    if (suppliedModeConfigurations != nil) [settings setValue:suppliedModeConfigurations forKey:@"DayloftModeConfigurations"];
     
     // update all the settings for the block, which we're basically just copying from defaults to settings
     [settings setValue: blockSettings[@"ClearCaches"] forKey: @"ClearCaches"];
@@ -365,13 +386,22 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         // for the normal resume path without restoring rules ahead of time.
         NSArray* combined = [SCMiscUtilities blocklistByAddingEntries:added toBlocklist:activeBlocklist];
         NSArray* previousSchedules = [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[];
+        NSDictionary* previousModeConfigurations = [settings valueForKey:@"DayloftModeConfigurations"] ?: @{};
         NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:combined];
+        NSString* activeMode = [settings valueForKey:@"ActiveDayloftMode"];
+        NSMutableDictionary* updatedModeConfigurations = [previousModeConfigurations mutableCopy];
+        if (activeMode.length > 0) {
+            NSDictionary* existing = [updatedModeConfigurations[activeMode] isKindOfClass:NSDictionary.class] ? updatedModeConfigurations[activeMode] : @{};
+            updatedModeConfigurations[activeMode] = @{ @"domains": [SCMiscUtilities blocklistByAddingEntries:combined toBlocklist:existing[@"domains"] ?: @[]], @"allowlist": @NO };
+        }
         [settings setValue:combined forKey:@"ActiveBlocklist"];
         if (![updatedSchedules isEqualToArray:previousSchedules]) [settings setValue:updatedSchedules forKey:@"DayloftRecurringSchedules"];
+        [settings setValue:updatedModeConfigurations forKey:@"DayloftModeConfigurations"];
         NSError* error = [settings syncSettingsAndWait:5];
         if (error) {
             [settings setValue:activeBlocklist forKey:@"ActiveBlocklist"];
             [settings setValue:previousSchedules forKey:@"DayloftRecurringSchedules"];
+            [settings setValue:previousModeConfigurations forKey:@"DayloftModeConfigurations"];
             [settings syncSettingsAndWait:5];
         }
         [SCHelperToolUtilities sendConfigurationChangedNotification];
@@ -399,9 +429,17 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     // in persisted state so recovery/restart cannot accidentally unblock them.
     NSArray* effectiveList = [SCMiscUtilities blocklistByAddingEntries:added toBlocklist:activeBlocklist];
     NSArray* previousSchedules = [settings valueForKey:@"DayloftRecurringSchedules"] ?: @[];
+    NSDictionary* previousModeConfigurations = [settings valueForKey:@"DayloftModeConfigurations"] ?: @{};
     NSArray* updatedSchedules = [self recurringSchedules:previousSchedules byAddingBlockedSites:effectiveList];
+    NSString* activeMode = [settings valueForKey:@"ActiveDayloftMode"];
+    NSMutableDictionary* updatedModeConfigurations = [previousModeConfigurations mutableCopy];
+    if (activeMode.length > 0) {
+        NSDictionary* existing = [updatedModeConfigurations[activeMode] isKindOfClass:NSDictionary.class] ? updatedModeConfigurations[activeMode] : @{};
+        updatedModeConfigurations[activeMode] = @{ @"domains": [SCMiscUtilities blocklistByAddingEntries:effectiveList toBlocklist:existing[@"domains"] ?: @[]], @"allowlist": @NO };
+    }
     [settings setValue:effectiveList forKey:@"ActiveBlocklist"];
     if (![updatedSchedules isEqualToArray:previousSchedules]) [settings setValue:updatedSchedules forKey:@"DayloftRecurringSchedules"];
+    [settings setValue:updatedModeConfigurations forKey:@"DayloftModeConfigurations"];
     
     // make sure everyone knows about our new list
     NSError* syncErr = [settings syncSettingsAndWait: 5];
@@ -666,12 +704,20 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
             }
         }
         NSMutableDictionary* config = [[settings valueForKey:@"DayloftScheduleSettings"] mutableCopy];
-        if (selected) { config[@"BreaksPerBlock"] = selected[@"breaks"]; config[@"DayloftMode"] = selected[@"mode"]; }
+        NSDictionary* selectedConfiguration = nil;
+        if (selected) {
+            NSMutableDictionary* modeConfigurations = [[settings valueForKey:@"DayloftModeConfigurations"] mutableCopy] ?: [NSMutableDictionary new];
+            selectedConfiguration = [SCRecurringSchedule configurationForSchedule:selected modeConfigurations:modeConfigurations];
+            modeConfigurations[selected[@"mode"]] = selectedConfiguration;
+            config[@"DayloftModeConfigurations"] = modeConfigurations;
+            config[@"BreaksPerBlock"] = selected[@"breaks"];
+            config[@"DayloftMode"] = selected[@"mode"];
+        }
         uid_t uid = [[settings valueForKey:@"DayloftScheduleUID"] unsignedIntValue];
         [[SCDaemon sharedDaemon] resetInactivityTimer];
         [self.daemonMethodLock unlock];
         if (selected) {
-            [self startBlockWithControllingUID:uid blocklist:[SCMiscUtilities cleanBlocklist:selected[@"domains"]] isAllowlist:[selected[@"allowlist"] boolValue] endDate:selectedInterval.endDate blockSettings:config authorization:nil reply:^(NSError* error) {
+            [self startBlockWithControllingUID:uid blocklist:selectedConfiguration[@"domains"] isAllowlist:[selectedConfiguration[@"allowlist"] boolValue] endDate:selectedInterval.endDate blockSettings:config authorization:nil reply:^(NSError* error) {
                 // Commit the occurrence after the start attempt. A crash before rules are
                 // installed must leave this window retryable on daemon restart.
                 if (!error) {

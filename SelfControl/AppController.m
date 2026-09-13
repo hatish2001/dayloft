@@ -164,8 +164,26 @@
 }
 
 - (NSDictionary*)blockSettingsSnapshot {
+    NSMutableDictionary* modeConfigurations = [NSMutableDictionary new];
+    NSDictionary* defaultsSnapshot = defaults_.dictionaryRepresentation;
+    for (NSString* key in defaultsSnapshot) {
+        if (![key hasPrefix:@"DayloftMode."]) continue;
+        NSString* name = [key substringFromIndex:@"DayloftMode.".length];
+        NSDictionary* value = [defaultsSnapshot[key] isKindOfClass:NSDictionary.class] ? defaultsSnapshot[key] : nil;
+        NSArray* domains = [value[@"domains"] isKindOfClass:NSArray.class] ? value[@"domains"] : @[];
+        if (name.length > 0 && [value[@"allowlist"] isKindOfClass:NSNumber.class]) {
+            modeConfigurations[name] = @{ @"domains": [SCMiscUtilities blocklistByAddingEntries:@[] toBlocklist:domains],
+                                           @"allowlist": @([value[@"allowlist"] boolValue]) };
+        }
+    }
+    NSString* currentMode = [defaults_ stringForKey:@"DayloftMode"] ?: @"Living";
+    modeConfigurations[currentMode] = @{
+        @"domains": [SCMiscUtilities blocklistByAddingEntries:@[] toBlocklist:[defaults_ arrayForKey:@"Blocklist"] ?: @[]],
+        @"allowlist": @([defaults_ boolForKey:@"BlockAsWhitelist"])
+    };
     return @{
-        @"DayloftMode": [defaults_ stringForKey:@"DayloftMode"] ?: @"Living",
+        @"DayloftMode": currentMode,
+        @"DayloftModeConfigurations": modeConfigurations,
         @"ClearCaches": [defaults_ valueForKey: @"ClearCaches"],
         @"AllowLocalNetworks": [defaults_ valueForKey: @"AllowLocalNetworks"],
         @"EvaluateCommonSubdomains": [defaults_ valueForKey: @"EvaluateCommonSubdomains"],
@@ -715,7 +733,14 @@
         }
     }
        
-	[defaults_ setValue: list forKey: @"Blocklist"];
+	NSString* activeMode = [[settings_ valueForKey:@"ActiveDayloftMode"] isKindOfClass:NSString.class] ? [settings_ valueForKey:@"ActiveDayloftMode"] : @"";
+    NSString* selectedMode = [defaults_ stringForKey:@"DayloftMode"] ?: @"Living";
+    if (activeMode.length == 0) activeMode = selectedMode;
+    NSMutableDictionary* modeSettings = [[defaults_ dictionaryForKey:[@"DayloftMode." stringByAppendingString:activeMode]] mutableCopy] ?: [NSMutableDictionary new];
+    modeSettings[@"domains"] = list;
+    modeSettings[@"allowlist"] = @NO;
+    [defaults_ setObject:modeSettings forKey:[@"DayloftMode." stringByAppendingString:activeMode]];
+    if ([activeMode isEqualToString:selectedMode]) [defaults_ setValue:list forKey:@"Blocklist"];
 
 	if(![SCUIUtilities blockIsRunning]) {
 		// This method shouldn't be getting called, a block is not on.

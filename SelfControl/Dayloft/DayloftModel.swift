@@ -45,7 +45,8 @@ final class DayloftModel: ObservableObject {
         duration = max(1, min(1440, state["duration"] as? Int ?? 45))
         breaks = state["breaks"] as? Int ?? 0
         mode = state["mode"] as? String ?? "Living"
-        let remote = (state["schedules"] as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
+        let remoteRows = (state["schedules"] as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
+        let remote = DayloftSchedule.resolvingModeConfigurations(state["modeConfigurations"] as? [String: Any] ?? [:], in: remoteRows)
         let saved = (defaults.array(forKey: "DayloftDraftSchedules") as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
         schedules = (state["schedulesConfigured"] as? Bool == true || !remote.isEmpty) ? remote : (!saved.isEmpty ? saved : DayloftSchedule.starters(domains: domains, allowlist: allowlist))
         refresh()
@@ -63,7 +64,8 @@ final class DayloftModel: ObservableObject {
         legacyDate = state["legacyDate"] as? Date ?? .distantPast
         scheduleError = state["scheduleError"] as? String ?? ""
         enforcementError = state["enforcementError"] as? String ?? ""
-        let remote = (state["schedules"] as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
+        let remoteRows = (state["schedules"] as? [[String: Any]] ?? []).compactMap(DayloftSchedule.init)
+        let remote = DayloftSchedule.resolvingModeConfigurations(state["modeConfigurations"] as? [String: Any] ?? [:], in: remoteRows)
         if !saving && (state["schedulesConfigured"] as? Bool == true || !remote.isEmpty) {
             if schedules != remote { schedules = remote }
             defaults.set(remote.map(\.dictionary), forKey: "DayloftDraftSchedules")

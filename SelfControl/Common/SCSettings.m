@@ -99,6 +99,7 @@ NSString* const SETTINGS_FILE_DIR = @"/usr/local/etc/";
         @"ScheduledBlockControllingUID": @0,
         @"ScheduledBlockLastError": @"",
         @"DayloftRecurringSchedules": @[],
+        @"DayloftModeConfigurations": @{},
         @"DayloftSchedulesConfigured": @NO,
         @"DayloftScheduleSettings": @{},
         @"DayloftScheduleUID": @0,
@@ -106,6 +107,7 @@ NSString* const SETTINGS_FILE_DIR = @"/usr/local/etc/";
         @"DayloftScheduleLastError": @"",
         @"DayloftFocusSessions": @[],
         @"DayloftEnforcementError": @"",
+        @"ActiveDayloftMode": @"",
 
         @"BlockIsRunning": @NO, // tells us whether a block is actually running on the system (to the best of our knowledge)
         @"TamperingDetected": @NO,

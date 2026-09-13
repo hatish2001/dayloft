@@ -32,6 +32,41 @@
     }
     return YES;
 }
++ (BOOL)validateModeConfigurations:(id)configurations {
+    if (![configurations isKindOfClass:NSDictionary.class] || [configurations count] > 64) return NO;
+    for (id mode in configurations) {
+        if (![mode isKindOfClass:NSString.class] || [mode length] == 0 || [mode length] > 200) return NO;
+        id value = configurations[mode];
+        if (![value isKindOfClass:NSDictionary.class]) return NO;
+        id domains = value[@"domains"], allowlist = value[@"allowlist"];
+        if (![domains isKindOfClass:NSArray.class] || [domains count] > 10000 || ![allowlist isKindOfClass:NSNumber.class]) return NO;
+        for (id domain in domains) if (![domain isKindOfClass:NSString.class]) return NO;
+    }
+    return YES;
+}
++ (NSDictionary*)configurationForSchedule:(NSDictionary*)schedule modeConfigurations:(NSDictionary*)configurations {
+    NSString* mode = [schedule[@"mode"] isKindOfClass:NSString.class] ? schedule[@"mode"] : @"";
+    NSDictionary* candidate = [configurations isKindOfClass:NSDictionary.class] && [configurations[mode] isKindOfClass:NSDictionary.class] ? configurations[mode] : nil;
+    if (candidate && [self validateModeConfigurations:@{mode: candidate}]) {
+        return @{ @"domains": [SCMiscUtilities blocklistByAddingEntries:@[] toBlocklist:candidate[@"domains"]],
+                  @"allowlist": @([candidate[@"allowlist"] boolValue]) };
+    }
+    return @{ @"domains": [SCMiscUtilities blocklistByAddingEntries:@[] toBlocklist:schedule[@"domains"] ?: @[]],
+              @"allowlist": @([schedule[@"allowlist"] boolValue]) };
+}
++ (NSDictionary*)modeConfigurationsByMigratingSchedules:(NSArray*)schedules existingConfigurations:(id)configurations {
+    NSMutableDictionary* migrated = [self validateModeConfigurations:configurations] ? [configurations mutableCopy] : [NSMutableDictionary new];
+    if (![schedules isKindOfClass:NSArray.class]) return migrated;
+    for (id value in schedules) {
+        if (![value isKindOfClass:NSDictionary.class]) continue;
+        NSDictionary* schedule = value;
+        NSString* mode = [schedule[@"mode"] isKindOfClass:NSString.class] ? schedule[@"mode"] : @"";
+        if (mode.length == 0 || migrated[mode] != nil) continue;
+        NSDictionary* configuration = [self configurationForSchedule:schedule modeConfigurations:@{}];
+        if ([self validateModeConfigurations:@{mode: configuration}]) migrated[mode] = configuration;
+    }
+    return migrated;
+}
 + (BOOL)hasEnabledSchedules:(NSArray*)schedules {
     for (NSDictionary* s in schedules) if ([s[@"enabled"] boolValue]) return YES;
     return NO;

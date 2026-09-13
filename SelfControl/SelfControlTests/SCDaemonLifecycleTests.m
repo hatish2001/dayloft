@@ -22,11 +22,13 @@ static NSUInteger stoppedTimers;
 
 static NSUInteger attemptedStarts;
 static BOOL failScheduledStart;
+static NSArray* lastStartedBlocklist;
 @interface ScheduledStartProbe : SCDaemonBlockMethods
 @end
 @implementation ScheduledStartProbe
 + (void)startBlockWithControllingUID:(uid_t)uid blocklist:(NSArray*)list isAllowlist:(BOOL)allowlist endDate:(NSDate*)end blockSettings:(NSDictionary*)config authorization:(NSData*)auth reply:(void(^)(NSError*))reply {
     attemptedStarts++;
+    lastStartedBlocklist = list;
     reply(failScheduledStart ? [NSError errorWithDomain:@"Test" code:1 userInfo:nil] : nil);
 }
 @end
@@ -46,7 +48,7 @@ static BOOL failScheduledStart;
 }
 - (void)setUp {
     [super setUp]; self.restorations = [NSMutableArray new]; self.clearSucceeds = YES;
-    stoppedTimers = 0; attemptedStarts = 0; failScheduledStart = YES;
+    stoppedTimers = 0; attemptedStarts = 0; failScheduledStart = YES; lastStartedBlocklist = nil;
     SCSettings.sharedSettings.readOnly = NO;
     [SCSettings.sharedSettings resetAllSettingsToDefaults];
     [self replaceMethod:class_getClassMethod(SCBlockUtilities.class, @selector(legacyBlockIsRunning)) withBlock:^BOOL(id object) { return NO; }];
@@ -242,5 +244,16 @@ static BOOL failScheduledStart;
     XCTAssertEqualObjects([s valueForKey:@"DayloftScheduleLastError"], @"");
     [ScheduledStartProbe checkupBlock];
     XCTAssertEqual(attemptedStarts, 2u);
+}
+- (void)testRecurringStartUsesAuthoritativeModeConfigurationInsteadOfStaleRow {
+    NSDateComponents* parts = [NSCalendar.currentCalendar components:NSCalendarUnitHour | NSCalendarUnitMinute fromDate:NSDate.date];
+    NSInteger minute = parts.hour * 60 + parts.minute;
+    NSDictionary* schedule = @{@"id": @"central", @"enabled": @YES, @"startMinute": @(minute), @"endMinute": @((minute + 60) % 1440), @"days": @[@1,@2,@3,@4,@5,@6,@7], @"domains": @[@"old.example"], @"allowlist": @NO, @"breaks": @0, @"mode": @"Living"};
+    SCSettings* s = SCSettings.sharedSettings;
+    [s setValue:@[schedule] forKey:@"DayloftRecurringSchedules"];
+    [s setValue:@{@"Living": @{@"domains": @[@"x.com", @"tiktok.com"], @"allowlist": @NO}} forKey:@"DayloftModeConfigurations"];
+    failScheduledStart = NO;
+    [ScheduledStartProbe checkupBlock];
+    XCTAssertEqualObjects(lastStartedBlocklist, (@[@"x.com", @"tiktok.com"]));
 }
 @end

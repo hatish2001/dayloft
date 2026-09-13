@@ -64,6 +64,19 @@ float const INACTIVITY_LIMIT_SECS = 60 * 2; // 2 minutes
         [settings syncSettingsAndWait: 5];
     }
 
+    // Older builds stored a separate website list in every schedule. Promote
+    // those lists once so future schedule starts resolve through one mode-owned
+    // configuration and can never restore a stale schedule copy.
+    id existingModeConfigurations = [settings valueForKey:@"DayloftModeConfigurations"];
+    NSDictionary* migratedModeConfigurations = [SCRecurringSchedule
+        modeConfigurationsByMigratingSchedules:[settings valueForKey:@"DayloftRecurringSchedules"]
+        existingConfigurations:existingModeConfigurations];
+    if (![migratedModeConfigurations isEqual:existingModeConfigurations]) {
+        [settings setValue:migratedModeConfigurations forKey:@"DayloftModeConfigurations"];
+        NSError* migrationError = [settings syncSettingsAndWait:5];
+        if (migrationError) NSLog(@"WARNING: Failed to migrate Dayloft mode configurations: %@", migrationError);
+    }
+
     // if there's any evidence of a block (i.e. an official one running,
     // OR just block remnants remaining in hosts), we should start
     // running checkup regularly so the block gets found/removed

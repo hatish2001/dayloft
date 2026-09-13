@@ -65,4 +65,25 @@
     s[@"enabled"] = @NO; XCTAssertTrue([SCRecurringSchedule validateSchedules:@[s]]);
     s = self.schedule; s[@"breaks"] = @4; XCTAssertFalse([SCRecurringSchedule validateSchedules:@[s]]);
 }
+- (void)testModeConfigurationOverridesLegacyScheduleDomains {
+    NSDictionary* resolved = [SCRecurringSchedule configurationForSchedule:self.schedule modeConfigurations:@{
+        @"Living": @{@"domains": @[@"x.com", @"tiktok.com"], @"allowlist": @NO}
+    }];
+    XCTAssertEqualObjects(resolved[@"domains"], (@[@"x.com", @"tiktok.com"]));
+    XCTAssertFalse([resolved[@"allowlist"] boolValue]);
+}
+- (void)testInvalidOrMissingModeConfigurationFallsBackToLegacySchedule {
+    NSDictionary* invalid = @{@"Living": @{@"domains": @"not-an-array", @"allowlist": @NO}};
+    XCTAssertFalse([SCRecurringSchedule validateModeConfigurations:invalid]);
+    NSDictionary* resolved = [SCRecurringSchedule configurationForSchedule:self.schedule modeConfigurations:@{}];
+    XCTAssertEqualObjects(resolved[@"domains"], (@[@"reddit.com"]));
+}
+- (void)testMigrationCreatesMissingModeOnceWithoutOverwritingAuthority {
+    NSDictionary* migrated = [SCRecurringSchedule modeConfigurationsByMigratingSchedules:@[self.schedule] existingConfigurations:@{}];
+    XCTAssertEqualObjects(migrated[@"Living"][@"domains"], (@[@"reddit.com"]));
+
+    NSDictionary* authoritative = @{@"Living": @{@"domains": @[@"x.com"], @"allowlist": @NO}};
+    NSDictionary* preserved = [SCRecurringSchedule modeConfigurationsByMigratingSchedules:@[self.schedule] existingConfigurations:authoritative];
+    XCTAssertEqualObjects(preserved, authoritative);
+}
 @end

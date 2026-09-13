@@ -67,6 +67,14 @@ struct DayloftSchedule: Identifiable, Codable, Equatable {
             return updated
         }
     }
+    static func resolvingModeConfigurations(_ configurations: [String: Any], in schedules: [Self]) -> [Self] {
+        configurations.reduce(schedules) { result, item in
+            guard let value = item.value as? [String: Any],
+                  let domains = value["domains"] as? [String],
+                  let allowlist = value["allowlist"] as? Bool else { return result }
+            return applyingMode(item.key, domains: domains, allowlist: allowlist, to: result)
+        }
+    }
 }
 
 struct DayloftFocusSession {

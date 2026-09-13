@@ -51,6 +51,13 @@ final class DayloftModelTests: XCTestCase {
         XCTAssertFalse(updated[0].enabled)
         XCTAssertTrue(updated[0].domains.isEmpty)
     }
+    func testAuthoritativeModeConfigurationRepairsStaleScheduleCopy() {
+        var living = DayloftSchedule(); living.mode = "Living"; living.domains = ["old.example"]
+        let resolved = DayloftSchedule.resolvingModeConfigurations([
+            "Living": ["domains": ["x.com", "tiktok.com"], "allowlist": false]
+        ], in: [living])
+        XCTAssertEqual(resolved[0].domains, ["x.com", "tiktok.com"])
+    }
     func testOverlappingBreaksAreOnlySubtractedOnce() {
         let start = Date(timeIntervalSince1970: 100_000)
         let s = DayloftFocusSession(start: start, end: start.addingTimeInterval(600), breaks: [
