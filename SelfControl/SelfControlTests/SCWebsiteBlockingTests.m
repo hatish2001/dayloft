@@ -97,7 +97,7 @@
     [manager addBlockEntryFromString:@"https://mobile.x.com/home"];
     [manager addBlockEntryFromString:@"https://vm.tiktok.com/example/"];
     XCTAssertTrue([manager finalizeBlock]);
-    for (NSString* host in @[@"x.com", @"www.x.com", @"twitter.com", @"api.twitter.com", @"tiktok.com", @"www.tiktok.com", @"vm.tiktok.com", @"vt.tiktok.com"]) {
+    for (NSString* host in @[@"x.com", @"www.x.com", @"twitter.com", @"api.twitter.com", @"t.co", @"twimg.com", @"abs.twimg.com", @"pbs.twimg.com", @"video.twimg.com", @"tiktok.com", @"www.tiktok.com", @"vm.tiktok.com", @"vt.tiktok.com"]) {
         XCTAssertTrue([manager.hosts.hosts containsObject:host], @"Missing %@", host);
     }
 }

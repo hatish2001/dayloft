@@ -6,6 +6,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#include <sys/types.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -29,10 +30,14 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)clearCachesIfRequested;
 
 // Clear only the caches for browsers
-+ (NSError*)clearBrowserCaches;
++ (nullable NSError*)clearBrowserCaches;
 
 // Clear only the OS-level DNS cache
 + (void)clearOSDNSCache;
+
+// Restart the controlling user's WebKit network and page processes so Safari
+// cannot retain a pre-block connection, cached page, or stale blocked result.
++ (void)resetWebKitNetworkingForControllingUID:(uid_t)controllingUID;
 
 // Removes block via settings, host file rules and ipfw rules,
 // deleting user caches if requested, and migrating legacy settings.

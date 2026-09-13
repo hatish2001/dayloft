@@ -4,7 +4,7 @@ Validated locally on Apple silicon with macOS 26 and Xcode 26.6 in September 202
 
 ## Automated checks
 
-- 72 XCTest tests pass: the 3 unchanged original tests, 9 calendar/schedule tests, 17 Swift model tests, 4 settings-isolation/history tests, 20 website-rule/enforcement-result tests, 3 update-policy tests, 3 authentication-policy tests, and 13 daemon lifecycle tests.
+- 73 XCTest tests pass: the 3 unchanged original tests, 9 calendar/schedule tests, 17 Swift model tests, 4 settings-isolation/history tests, 20 website-rule/enforcement-result tests, 3 update-policy tests, 3 authentication-policy tests, and 14 daemon lifecycle tests.
 - The original test file matches its recorded SHA-256 checksum.
 - A fresh public-source copy with newly installed, pinned CocoaPods dependencies builds and passes tests.
 - Both unsigned test bundles and the locally Apple Development-signed app pass resource and embedded-helper identity checks.
@@ -81,3 +81,9 @@ The helper stays registered with launchd when its idle process exits, so the nex
 Schedules now inherit the website list from their selected focus mode. Saving a mode updates every schedule that uses it before the editor closes, and the schedule editor exposes the mode instead of a second independent website list. This removes the stale-copy path that let a three-site Morning Zen schedule replace a five-site Living configuration at its next automatic start. Website merging also treats `www.example.com` and `example.com` as one entry so adding a site during focus does not inflate the saved count with equivalent spellings.
 
 The privileged helper now stores one authoritative configuration per mode. Automatic starts resolve websites from that central profile; per-schedule domain arrays are read only as a migration fallback and are immediately promoted into the central store. Active website additions update the same profile atomically with the live block. A regression test deliberately gives a schedule a stale domain array and verifies that the daemon starts from the authoritative mode instead.
+
+## Safari and X service-cache repair (4.2.8)
+
+Safari keeps DNS decisions and established connections inside a separate WebKit networking service, while cached pages and service workers live in WebContent processes. Those services could retain X's public address and page after Dayloft installed correct hosts rules, letting an already-resolved site continue loading after a tab was closed and reopened. The helper now records the controlling user and restarts that user's WebKit networking and page processes whenever rules are installed or extended. It also resets them when a break starts or a block ends, preventing stale blocked results after rules are removed. Safari relaunches the services without closing its windows or tabs.
+
+X entries now cover its parent sites, short links, and static-media service domains (`t.co` and `twimg.com`, including the `abs`, `pbs`, and `video` hosts). A replacement helper rebuilds the authoritative rules for an active session as soon as it launches, so fixes apply without waiting for the next focus period. Lifecycle regression coverage verifies that live additions and breaks reset the correct user's WebKit services, while additions made during an active break do not restore enforcement early.

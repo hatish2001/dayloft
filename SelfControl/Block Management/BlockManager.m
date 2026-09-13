@@ -348,7 +348,8 @@
     if (!isAllowlist && (belongsTo(@"x.com") || belongsTo(@"twitter.com"))) {
         base = @"x.com";
         [newHosts addObjectsFromArray:@[@"x.com", @"www.x.com", @"mobile.x.com", @"api.x.com",
-            @"twitter.com", @"www.twitter.com", @"mobile.twitter.com", @"api.twitter.com"]];
+            @"twitter.com", @"www.twitter.com", @"mobile.twitter.com", @"api.twitter.com",
+            @"t.co", @"twimg.com", @"abs.twimg.com", @"pbs.twimg.com", @"video.twimg.com"]];
     }
     if (!isAllowlist && belongsTo(@"tiktok.com")) {
         base = @"tiktok.com";

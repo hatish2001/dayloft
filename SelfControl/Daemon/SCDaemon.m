@@ -11,7 +11,9 @@
 #import"SCDaemonBlockMethods.h"
 #import "SCFileWatcher.h"
 #import "SCSettings.h"
+#import "SCBlockUtilities.h"
 #import "SCRecurringSchedule.h"
+#import "SCHelperToolUtilities.h"
 
 static NSString* serviceName = @"org.dayloft.focusd";
 float const INACTIVITY_LIMIT_SECS = 60 * 2; // 2 minutes
@@ -45,10 +47,12 @@ float const INACTIVITY_LIMIT_SECS = 60 * 2; // 2 minutes
     return daemon;
 }
 
-- (id) init {
-    _listener = [[NSXPCListener alloc] initWithMachServiceName: serviceName];
-    _listener.delegate = self;
-    
+- (id)init {
+    self = [super init];
+    if (self) {
+        _listener = [[NSXPCListener alloc] initWithMachServiceName:serviceName];
+        _listener.delegate = self;
+    }
     return self;
 }
 
@@ -75,6 +79,18 @@ float const INACTIVITY_LIMIT_SECS = 60 * 2; // 2 minutes
         [settings setValue:migratedModeConfigurations forKey:@"DayloftModeConfigurations"];
         NSError* migrationError = [settings syncSettingsAndWait:5];
         if (migrationError) NSLog(@"WARNING: Failed to migrate Dayloft mode configurations: %@", migrationError);
+    }
+
+    // A newly installed helper may contain stricter aliases or cache handling
+    // than the helper that began this session. Rebuild the authoritative rules
+    // on helper launch so an in-progress block receives those fixes immediately.
+    if ([SCBlockUtilities modernBlockIsRunning] && ![SCBlockUtilities currentBlockIsExpired] &&
+        ![settings boolForKey:@"BlockPausedForBreak"]) {
+        if (![SCHelperToolUtilities installBlockRulesFromSettings]) {
+            NSLog(@"WARNING: Failed to recover active Dayloft rules while starting the helper");
+        }
+        [settings syncSettingsAndWait:5];
+        [SCHelperToolUtilities sendConfigurationChangedNotification];
     }
 
     // if there's any evidence of a block (i.e. an official one running,

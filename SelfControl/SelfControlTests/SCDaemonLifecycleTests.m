@@ -37,6 +37,8 @@ static NSArray* lastStartedBlocklist;
 @property NSMutableArray<void(^)(void)>* restorations;
 @property BOOL clearSucceeds;
 @property NSUInteger clearCalls;
+@property NSUInteger webKitResetCalls;
+@property uid_t webKitResetUID;
 @property NSError* persistenceError;
 @end
 @implementation SCDaemonLifecycleTests
@@ -48,6 +50,7 @@ static NSArray* lastStartedBlocklist;
 }
 - (void)setUp {
     [super setUp]; self.restorations = [NSMutableArray new]; self.clearSucceeds = YES;
+    self.webKitResetCalls = 0; self.webKitResetUID = 0;
     stoppedTimers = 0; attemptedStarts = 0; failScheduledStart = YES; lastStartedBlocklist = nil;
     SCSettings.sharedSettings.readOnly = NO;
     [SCSettings.sharedSettings resetAllSettingsToDefaults];
@@ -61,6 +64,10 @@ static NSArray* lastStartedBlocklist;
     for (NSString* selector in @[@"clearCachesIfRequested", @"sendConfigurationChangedNotification", @"playBlockEndSound"]) {
         [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, NSSelectorFromString(selector)) withBlock:^(id object) {}];
     }
+    [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, @selector(resetWebKitNetworkingForControllingUID:)) withBlock:^(id object, uid_t uid) {
+        self.webKitResetCalls++;
+        self.webKitResetUID = uid;
+    }];
     [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, @selector(installBlockRulesFromSettings)) withBlock:^BOOL(id object) {
         @throw [NSException exceptionWithName:@"UnexpectedNetworkAccess" reason:@"An intentional break must not reinstall rules" userInfo:nil];
     }];
@@ -79,6 +86,7 @@ static NSArray* lastStartedBlocklist;
     [s setValue:@YES forKey:@"BlockIsRunning"];
     [s setValue:[NSDate dateWithTimeIntervalSinceNow:3600] forKey:@"BlockEndDate"];
     [s setValue:@[@"example.org"] forKey:@"ActiveBlocklist"];
+    [s setValue:@501 forKey:@"ActiveBlockControllingUID"];
 }
 - (void)testScheduleChangesAreRejectedDuringFocusAndBreakWithoutChangingSession {
     [self makeActiveSession];
@@ -171,6 +179,7 @@ static NSArray* lastStartedBlocklist;
     XCTAssertTrue([s boolForKey:@"BlockPausedForBreak"]);
     XCTAssertEqualObjects([s valueForKey:@"BreakEndDate"], breakEnd);
     XCTAssertEqual(self.clearCalls, 0u);
+    XCTAssertEqual(self.webKitResetCalls, 0u);
 }
 - (void)testAddingSitesPersistsThemForFutureDenylistSchedules {
     [self makeActiveSession];
@@ -182,6 +191,21 @@ static NSArray* lastStartedBlocklist;
     XCTAssertEqual(replies, 1u);
     XCTAssertEqualObjects([s valueForKey:@"ActiveBlocklist"], (@[@"example.org", @"x.com", @"tiktok.com"]));
     XCTAssertEqualObjects([s valueForKey:@"DayloftRecurringSchedules"][0][@"domains"], (@[@"youtube.com", @"example.org", @"x.com", @"tiktok.com"]));
+    XCTAssertEqual(self.webKitResetCalls, 1u);
+    XCTAssertEqual(self.webKitResetUID, (uid_t)501);
+}
+
+- (void)testBreakResetsWebKitNetworkingAfterRemovingRules {
+    [self makeActiveSession];
+    SCSettings* s = SCSettings.sharedSettings;
+    [s setValue:@1 forKey:@"MaxBreaksPerBlock"];
+    __block NSUInteger replies = 0;
+    [SCDaemonBlockMethods takeBreakWithAuthorization:NSData.data reply:^(NSError* error) { replies++; XCTAssertNil(error); }];
+    XCTAssertEqual(replies, 1u);
+    XCTAssertTrue([s boolForKey:@"BlockPausedForBreak"]);
+    XCTAssertEqual(self.clearCalls, 1u);
+    XCTAssertEqual(self.webKitResetCalls, 1u);
+    XCTAssertEqual(self.webKitResetUID, (uid_t)501);
 }
 - (void)testFailedExtensionPersistenceRestoresOriginalEnd {
     [self makeActiveSession];
@@ -226,6 +250,8 @@ static NSArray* lastStartedBlocklist;
     XCTAssertFalse([s boolForKey:@"BlockIsRunning"]);
     XCTAssertEqualObjects([s valueForKey:@"DayloftEnforcementError"], @"");
     XCTAssertEqual(self.clearCalls, 2u);
+    XCTAssertEqual(self.webKitResetCalls, 1u);
+    XCTAssertEqual(self.webKitResetUID, (uid_t)501);
     XCTAssertEqual(stoppedTimers, 1u);
 }
 - (void)testFailedRecurringStartRetriesUntilSuccessful {

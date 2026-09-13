@@ -93,6 +93,7 @@
     [settings setValue: nil forKey: @"BlockEndDate"];
     [settings setValue: nil forKey: @"ActiveBlocklist"];
     [settings setValue: nil forKey: @"ActiveBlockAsWhitelist"];
+    [settings setValue: @0 forKey: @"ActiveBlockControllingUID"];
     [settings setValue: @NO forKey: @"BlockPausedForBreak"];
     [settings setValue: [NSDate distantPast] forKey: @"BreakEndDate"];
 }

@@ -258,6 +258,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     // update SCSettings with the blocklist and end date that've been requested
     [settings setValue: blocklist forKey: @"ActiveBlocklist"];
     [settings setValue: @(isAllowlist) forKey: @"ActiveBlockAsWhitelist"];
+    [settings setValue: @(controllingUID) forKey: @"ActiveBlockControllingUID"];
     [settings setValue: endDate forKey: @"BlockEndDate"];
     NSInteger breakBudget = MIN(MAX([blockSettings[@"BreaksPerBlock"] integerValue], 0), 3);
     [settings setValue: @(breakBudget) forKey: @"MaxBreaksPerBlock"];
@@ -453,6 +454,7 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
     // Clear all caches if the user has the correct preference set, so
     // that blocked pages are not loaded from a cache.
     [SCHelperToolUtilities clearCachesIfRequested];
+    [SCHelperToolUtilities resetWebKitNetworkingForControllingUID:[[settings valueForKey:@"ActiveBlockControllingUID"] unsignedIntValue]];
 
     [SCSentry addBreadcrumb: @"Daemon updated blocklist successfully" category: @"daemon"];
     NSLog(@"INFO: Blocklist successfully updated.");
@@ -600,6 +602,8 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         [SCSentry captureError: syncErr];
     }
 
+    [SCHelperToolUtilities clearCachesIfRequested];
+    [SCHelperToolUtilities resetWebKitNetworkingForControllingUID:[[settings valueForKey:@"ActiveBlockControllingUID"] unsignedIntValue]];
     [SCHelperToolUtilities sendConfigurationChangedNotification];
     [SCSentry addBreadcrumb: @"Daemon started a five-minute focus break" category: @"daemon"];
     reply(syncErr);

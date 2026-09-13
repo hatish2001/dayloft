@@ -81,6 +81,7 @@ NSString* const SETTINGS_FILE_DIR = @"/usr/local/etc/";
         @"BlockEndDate": [NSDate distantPast],
         @"ActiveBlocklist": @[],
         @"ActiveBlockAsWhitelist": @NO,
+        @"ActiveBlockControllingUID": @0,
         @"StrictDomainBlocking": @YES,
         @"MaxBreaksPerBlock": @0,
         @"BreaksUsed": @0,

@@ -9,6 +9,21 @@
 #import "BlockManager.h"
 #include <stdlib.h>
 
+static uid_t SCActiveControllingUID(SCSettings* settings) {
+    uid_t controllingUID = [[settings valueForKey:@"ActiveBlockControllingUID"] unsignedIntValue];
+    if (controllingUID != 0) return controllingUID;
+
+    // Active blocks created by 4.2.6 and earlier did not have the dedicated
+    // key, but Dayloft's session record already carried the authenticated UID.
+    id sessionRecords = [settings valueForKey:@"DayloftFocusSessions"];
+    NSDictionary* session = [sessionRecords isKindOfClass:NSArray.class] ? [sessionRecords lastObject] : nil;
+    if ([session isKindOfClass:NSDictionary.class] && [session[@"uid"] respondsToSelector:@selector(unsignedIntValue)]) {
+        controllingUID = [session[@"uid"] unsignedIntValue];
+        if (controllingUID != 0) [settings setValue:@(controllingUID) forKey:@"ActiveBlockControllingUID"];
+    }
+    return controllingUID;
+}
+
 @implementation SCHelperToolUtilities
 
 + (BOOL)installBlockRulesFromSettings {
@@ -32,6 +47,9 @@
     [blockManager addBlockEntriesFromStrings: [settings valueForKey: @"ActiveBlocklist"]];
     BOOL installed = [blockManager finalizeBlock];
     [settings setValue:installed ? @"" : @"Dayloft could not install its network rules. Blocking is not fully active. Please reopen Dayloft and try again." forKey:@"DayloftEnforcementError"];
+    if (installed) {
+        [SCHelperToolUtilities resetWebKitNetworkingForControllingUID:SCActiveControllingUID(settings)];
+    }
     return installed;
 }
 
@@ -129,6 +147,35 @@
     NSLog(@"Cleared OS DNS caches");
 }
 
++ (void)resetWebKitNetworkingForControllingUID:(uid_t)controllingUID {
+    if (controllingUID == 0) {
+        NSLog(@"WARNING: Cannot reset WebKit networking without a controlling user");
+        return;
+    }
+
+    // Safari keeps DNS and established connections in its networking process,
+    // while page-cache and service-worker state can survive in WebContent.
+    // Safari automatically relaunches both services without closing its tabs.
+    for (NSString* processName in @[@"com.apple.WebKit.Networking", @"com.apple.WebKit.WebContent"]) {
+        NSTask* resetWebKit = [[NSTask alloc] init];
+        [resetWebKit setLaunchPath:@"/usr/bin/pkill"];
+        [resetWebKit setArguments:@[@"-KILL", @"-U", [NSString stringWithFormat:@"%u", controllingUID], @"-x", processName]];
+        @try {
+            [resetWebKit launch];
+            [resetWebKit waitUntilExit];
+            if (resetWebKit.terminationStatus == 0) {
+                NSLog(@"Reset %@ for user %u", processName, controllingUID);
+            } else {
+                // pkill returns 1 when there is no matching process, which is
+                // a normal outcome when Safari is closed.
+                NSLog(@"No %@ process needed a reset for user %u", processName, controllingUID);
+            }
+        } @catch (NSException* exception) {
+            NSLog(@"WARNING: Could not reset %@ for user %u: %@", processName, controllingUID, exception);
+        }
+    }
+}
+
 + (void)playBlockEndSound {
     SCSettings* settings = [SCSettings sharedSettings];
     if([settings boolForKey: @"BlockSoundShouldPlay"]) {
@@ -145,6 +192,7 @@
 
 + (BOOL)removeBlock {
     SCSettings* settings = [SCSettings sharedSettings];
+    uid_t controllingUID = SCActiveControllingUID(settings);
     if (![[BlockManager new] clearBlock]) {
         // Preserve the end date and running state so cleanup is retried, even
         // when this began as recovery of orphaned rules at daemon startup.
@@ -158,6 +206,7 @@
     [settings setValue:@"" forKey:@"DayloftEnforcementError"];
     
     [SCHelperToolUtilities clearCachesIfRequested];
+    [SCHelperToolUtilities resetWebKitNetworkingForControllingUID:controllingUID];
 
     // play a sound letting
     [SCHelperToolUtilities playBlockEndSound];
