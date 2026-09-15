@@ -54,6 +54,7 @@ static NSArray* lastStartedBlocklist;
     stoppedTimers = 0; attemptedStarts = 0; failScheduledStart = YES; lastStartedBlocklist = nil;
     SCSettings.sharedSettings.readOnly = NO;
     [SCSettings.sharedSettings resetAllSettingsToDefaults];
+    [SCHelperToolUtilities resetWebKitNetworkMonitoringState];
     [self replaceMethod:class_getClassMethod(SCBlockUtilities.class, @selector(legacyBlockIsRunning)) withBlock:^BOOL(id object) { return NO; }];
     [self replaceMethod:class_getClassMethod(SCMigrationUtilities.class, @selector(legacySettingsFoundForUser:)) withBlock:^BOOL(id object, uid_t uid) { return NO; }];
     [self replaceMethod:class_getInstanceMethod(BlockManager.class, @selector(clearBlock)) withBlock:^BOOL(id object) { self.clearCalls++; return self.clearSucceeds; }];
@@ -64,6 +65,7 @@ static NSArray* lastStartedBlocklist;
     for (NSString* selector in @[@"clearCachesIfRequested", @"sendConfigurationChangedNotification", @"playBlockEndSound"]) {
         [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, NSSelectorFromString(selector)) withBlock:^(id object) {}];
     }
+    [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, @selector(maintainWebKitNetworkIsolationForControllingUID:)) withBlock:^(id object, uid_t uid) {}];
     [self replaceMethod:class_getClassMethod(SCHelperToolUtilities.class, @selector(resetWebKitNetworkingForControllingUID:)) withBlock:^(id object, uid_t uid) {
         self.webKitResetCalls++;
         self.webKitResetUID = uid;
@@ -77,9 +79,36 @@ static NSArray* lastStartedBlocklist;
 }
 - (void)tearDown {
     [SCSettings.sharedSettings resetAllSettingsToDefaults];
+    [SCHelperToolUtilities resetWebKitNetworkMonitoringState];
     for (void(^restore)(void) in self.restorations.reverseObjectEnumerator) restore();
     self.restorations = nil;
     [super tearDown];
+}
+
+- (void)testLateWebKitNetworkingProcessIsResetOnceAndReplacementIsTrusted {
+    NSDate* now = [NSDate date];
+    XCTAssertTrue([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                currentProcessIdentifiers:[NSSet setWithObject:@101]
+                                                                      now:now]);
+    XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                 currentProcessIdentifiers:[NSSet setWithObject:@102]
+                                                                       now:[now dateByAddingTimeInterval:1]]);
+    XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                 currentProcessIdentifiers:[NSSet setWithObject:@102]
+                                                                       now:[now dateByAddingTimeInterval:2]]);
+    XCTAssertTrue([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                currentProcessIdentifiers:[NSSet setWithObject:@103]
+                                                                      now:[now dateByAddingTimeInterval:60]]);
+}
+
+- (void)testFirstWebKitProcessAfterIdleBlockStartIsReset {
+    NSDate* now = [NSDate date];
+    XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                 currentProcessIdentifiers:[NSSet set]
+                                                                       now:now]);
+    XCTAssertTrue([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                currentProcessIdentifiers:[NSSet setWithObject:@201]
+                                                                      now:[now dateByAddingTimeInterval:60]]);
 }
 - (void)makeActiveSession {
     SCSettings* s = SCSettings.sharedSettings;

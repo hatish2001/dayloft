@@ -800,12 +800,20 @@ NSTimeInterval CHECKUP_LOCK_TIMEOUT = 0.5; // use a shorter lock timeout for che
         }
         [SCHelperToolUtilities clearCachesIfRequested];
         [SCHelperToolUtilities sendConfigurationChangedNotification];
-    } else if ([[NSDate date] timeIntervalSinceDate: lastBlockIntegrityCheck] > integrityCheckIntervalSecs) {
-        lastBlockIntegrityCheck = [NSDate date];
-        // The block is still on.  Every once in a while, we should
-        // check if anybody removed our rules, and if so
-        // re-add them.
-        shouldRunIntegrityCheck = YES;
+    } else {
+        // Safari can launch a networking process hours after a scheduled block
+        // begins. Reset that first late process so cached direct-IP routes do
+        // not bypass the active hosts rules.
+        if (![settings boolForKey:@"ActiveBlockAsWhitelist"] && [settings boolForKey:@"StrictDomainBlocking"]) {
+            [SCHelperToolUtilities maintainWebKitNetworkIsolationForControllingUID:[[settings valueForKey:@"ActiveBlockControllingUID"] unsignedIntValue]];
+        }
+
+        if ([[NSDate date] timeIntervalSinceDate:lastBlockIntegrityCheck] > integrityCheckIntervalSecs) {
+            lastBlockIntegrityCheck = [NSDate date];
+            // The block is still on. Every once in a while, check whether
+            // anybody removed our rules and re-add them if necessary.
+            shouldRunIntegrityCheck = YES;
+        }
     }
     
     [[SCDaemon sharedDaemon] resetInactivityTimer];

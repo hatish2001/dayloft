@@ -39,6 +39,18 @@ NS_ASSUME_NONNULL_BEGIN
 // cannot retain a pre-block connection, cached page, or stale blocked result.
 + (void)resetWebKitNetworkingForControllingUID:(uid_t)controllingUID;
 
+// During a strict denylist session, Safari may launch a new networking process
+// long after the block began and restore cached direct connections. Watch for
+// that first process and reset it once so its replacement starts behind the
+// active DNS rules.
++ (void)maintainWebKitNetworkIsolationForControllingUID:(uid_t)controllingUID;
+
+// Deterministic state-machine hooks used by the test target.
++ (BOOL)shouldResetWebKitNetworkingForControllingUID:(uid_t)controllingUID
+                            currentProcessIdentifiers:(NSSet<NSNumber*>*)processIdentifiers
+                                                  now:(NSDate*)now;
++ (void)resetWebKitNetworkMonitoringState;
+
 // Removes block via settings, host file rules and ipfw rules,
 // deleting user caches if requested, and migrating legacy settings.
 + (BOOL)removeBlock;

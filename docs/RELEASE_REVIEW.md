@@ -1,4 +1,4 @@
-# Dayloft 4.2.8 release review
+# Dayloft 4.2.9 release review
 
 The source is public. No installer has been published. This review found and fixed release-relevant defects; it does not establish that the app is bug-free or ready for public binary distribution.
 
@@ -17,13 +17,14 @@ The source is public. No installer has been published. This review found and fix
 | P2 | Mutable action tags, overlapping release runs, and dispatches outside main weakened release reproducibility and credential boundaries. | Actions are pinned to verified commits; checkout credentials are not persisted. Releases are serialized, the workflow permits main only, and the actual GitHub release environment enforces a main-only branch policy. Built artifacts are retained before attempting draft creation. Raw update-key and keychain files are ignored and rejected by the source audit. |
 | P1 | Mode and schedule copies could restore an old three-site list over the user's five-site configuration. | One authoritative website profile now owns manual and scheduled starts. Active additions update it atomically, and stale schedule copies are migration-only fallbacks. |
 | P1 | Safari could keep X working through an established WebKit connection and cached page even after correct hosts rules were installed. | The helper records the authenticated user, resets that user's WebKit network/page processes at rule transitions, blocks X/Twitter short-link and media hosts, and rebuilds active rules immediately after a helper upgrade. Live checks show the X family resolving only to `0.0.0.0`/`::`, no WebKit connection to X's public addresses, failed X/media requests, and a successful unrelated Google request. |
+| P1 | Safari launched after a scheduled start could restore Instagram through a fresh WebKit process that the start-time reset never saw. | During strict denylist sessions, the daemon detects a previously unseen WebKit networking process, resets it once, and trusts the clean replacement. Tests cover late launch and prove the replacement does not enter a reset loop. |
 | P1 | Browser state could remain blocked after a break or natural cleanup. | Break and removal paths flush DNS and restart the same user's WebKit services after rules are removed. Tests verify the reset occurs only when enforcement actually changes. |
 
 The shared daemon lock also now uses thread-safe initialization, start timers run after unlocking, and mutation methods return persistence failures instead of silently reporting success.
 
 ## Validation
 
-- 73 local XCTest tests pass, including the original three tests unchanged byte-for-byte.
+- 75 local XCTest tests pass, including the original three tests unchanged byte-for-byte.
 - Universal Release compilation passes; all nine bundled executable/framework binaries contain arm64 and x86_64.
 - Workflow syntax passes actionlint; shell syntax and the public-source audit pass.
 - Sparkle signature generation/verification rejects tampered payloads and mismatched keys. The previous feed-generation smoke test remains documented in VALIDATION.md; this review does not replace a real installed-app update test.

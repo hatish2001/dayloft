@@ -93,3 +93,9 @@ X entries now cover its parent sites, short links, and static-media service doma
 An ad-hoc Debug copy could enter the old remove-first `SMJobBless` path. macOS rejected its unsigned replacement after the existing launchd registration had already been removed, leaving the signed app unable to start a block. Dayloft now validates the app and embedded helper signatures, identifiers, and matching Team ID before any privileged mutation. It attempts a normal bless first and removes an existing registration only when launchd returns the specific stale-job error the retry handles. Invalid development copies fail closed without touching a working helper.
 
 The stale registration was repaired from the signed `/Applications/Dayloft.app` copy. The app then started a five-site session, relaunched without another install prompt, and retained the same helper PID and session timer. `launchctl` reported `org.dayloft.focusd` running; the exact reported Instagram Reel, Instagram parent/API aliases, X, and TikTok resolved only to `0.0.0.0` and `::` and refused HTTPS connections, while Google returned HTTP 200.
+
+## Late Safari process enforcement (4.2.9)
+
+A scheduled block can begin while Safari is closed, then Safari can launch its WebKit networking process hours later and restore a cached direct connection without consulting the already-blocked hostname. The daemon now watches the controlling user's WebKit networking process during strict denylist sessions. It resets the first previously unseen process and trusts the clean replacement, avoiding both the bypass and a repeated reset loop. The monitor uses process identity rather than broad destination-IP firewall rules, so shared Meta and Google infrastructure does not block unrelated sites.
+
+Two deterministic lifecycle tests cover a process that appears long after an idle block start and a reset followed by a trusted replacement. The complete suite passes with 75 tests.

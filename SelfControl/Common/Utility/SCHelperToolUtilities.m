@@ -7,7 +7,50 @@
 
 #import "SCHelperToolUtilities.h"
 #import "BlockManager.h"
+#import <libproc.h>
 #include <stdlib.h>
+#include <sys/proc_info.h>
+
+static NSTimeInterval const SCWebKitReplacementWindowSeconds = 10.0;
+static NSMutableDictionary<NSNumber*, NSMutableDictionary*>* SCWebKitMonitorStates;
+
+static NSSet<NSNumber*>* SCProcessIdentifiersNamedForUser(NSString* executableName, uid_t controllingUID) {
+    int byteCount = proc_listpids(PROC_ALL_PIDS, 0, NULL, 0);
+    if (byteCount <= 0) return [NSSet set];
+
+    pid_t* pids = calloc((size_t)byteCount / sizeof(pid_t), sizeof(pid_t));
+    if (pids == NULL) return [NSSet set];
+    byteCount = proc_listpids(PROC_ALL_PIDS, 0, pids, byteCount);
+
+    NSMutableSet<NSNumber*>* matches = [NSMutableSet set];
+    int pidCount = MAX(byteCount, 0) / (int)sizeof(pid_t);
+    for (int index = 0; index < pidCount; index++) {
+        pid_t pid = pids[index];
+        if (pid <= 0) continue;
+
+        struct proc_bsdinfo info = {0};
+        if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != sizeof(info) || info.pbi_uid != controllingUID) continue;
+
+        char executablePath[PROC_PIDPATHINFO_MAXSIZE] = {0};
+        if (proc_pidpath(pid, executablePath, sizeof(executablePath)) <= 0) continue;
+        NSString* path = [NSString stringWithUTF8String:executablePath];
+        if ([path.lastPathComponent isEqualToString:executableName]) [matches addObject:@(pid)];
+    }
+    free(pids);
+    return matches;
+}
+
+static void SCNoteWebKitNetworkingReset(uid_t controllingUID, BOOL expectsReplacement) {
+    if (controllingUID == 0) return;
+    @synchronized(SCHelperToolUtilities.class) {
+        if (SCWebKitMonitorStates == nil) SCWebKitMonitorStates = [NSMutableDictionary new];
+        SCWebKitMonitorStates[@(controllingUID)] = [@{
+            @"trusted": [NSSet set],
+            @"awaitingReplacement": @(expectsReplacement),
+            @"replacementDeadline": [NSDate dateWithTimeIntervalSinceNow:SCWebKitReplacementWindowSeconds]
+        } mutableCopy];
+    }
+}
 
 static uid_t SCActiveControllingUID(SCSettings* settings) {
     uid_t controllingUID = [[settings valueForKey:@"ActiveBlockControllingUID"] unsignedIntValue];
@@ -153,6 +196,8 @@ static uid_t SCActiveControllingUID(SCSettings* settings) {
         return;
     }
 
+    NSSet<NSNumber*>* networkingPIDs = SCProcessIdentifiersNamedForUser(@"com.apple.WebKit.Networking", controllingUID);
+
     // Safari keeps DNS and established connections in its networking process,
     // while page-cache and service-worker state can survive in WebContent.
     // Safari automatically relaunches both services without closing its tabs.
@@ -173,6 +218,74 @@ static uid_t SCActiveControllingUID(SCSettings* settings) {
         } @catch (NSException* exception) {
             NSLog(@"WARNING: Could not reset %@ for user %u: %@", processName, controllingUID, exception);
         }
+    }
+    SCNoteWebKitNetworkingReset(controllingUID, networkingPIDs.count > 0);
+}
+
++ (BOOL)shouldResetWebKitNetworkingForControllingUID:(uid_t)controllingUID
+                            currentProcessIdentifiers:(NSSet<NSNumber*>*)processIdentifiers
+                                                  now:(NSDate*)now {
+    if (controllingUID == 0) return NO;
+    NSSet<NSNumber*>* current = [processIdentifiers isKindOfClass:NSSet.class] ? processIdentifiers : [NSSet set];
+    NSDate* observationDate = [now isKindOfClass:NSDate.class] ? now : [NSDate date];
+
+    @synchronized(self) {
+        if (SCWebKitMonitorStates == nil) SCWebKitMonitorStates = [NSMutableDictionary new];
+        NSMutableDictionary* state = SCWebKitMonitorStates[@(controllingUID)];
+        if (state == nil) {
+            state = [@{
+                @"trusted": [NSSet set],
+                @"awaitingReplacement": @NO,
+                @"replacementDeadline": NSDate.distantPast
+            } mutableCopy];
+            SCWebKitMonitorStates[@(controllingUID)] = state;
+        }
+
+        BOOL awaitingReplacement = [state[@"awaitingReplacement"] boolValue];
+        NSDate* replacementDeadline = state[@"replacementDeadline"];
+        if (current.count == 0) {
+            state[@"trusted"] = [NSSet set];
+            if (awaitingReplacement && [observationDate compare:replacementDeadline] == NSOrderedDescending) {
+                state[@"awaitingReplacement"] = @NO;
+            }
+            return NO;
+        }
+
+        if (awaitingReplacement && [observationDate compare:replacementDeadline] != NSOrderedDescending) {
+            // This process was launched because of our reset, so it has never
+            // run without the current hosts rules. Remember it as clean.
+            state[@"trusted"] = current;
+            state[@"awaitingReplacement"] = @NO;
+            return NO;
+        }
+
+        state[@"awaitingReplacement"] = @NO;
+        NSSet<NSNumber*>* trusted = [state[@"trusted"] isKindOfClass:NSSet.class] ? state[@"trusted"] : [NSSet set];
+        if (![current isSubsetOfSet:trusted]) {
+            state[@"trusted"] = [NSSet set];
+            state[@"awaitingReplacement"] = @YES;
+            state[@"replacementDeadline"] = [observationDate dateByAddingTimeInterval:SCWebKitReplacementWindowSeconds];
+            return YES;
+        }
+
+        // Forget processes that have exited so a recycled PID cannot inherit trust.
+        state[@"trusted"] = current;
+        return NO;
+    }
+}
+
++ (void)maintainWebKitNetworkIsolationForControllingUID:(uid_t)controllingUID {
+    if (controllingUID == 0) return;
+    NSSet<NSNumber*>* processIdentifiers = SCProcessIdentifiersNamedForUser(@"com.apple.WebKit.Networking", controllingUID);
+    if ([self shouldResetWebKitNetworkingForControllingUID:controllingUID currentProcessIdentifiers:processIdentifiers now:NSDate.date]) {
+        NSLog(@"A new WebKit networking process appeared during an active block; resetting it for user %u", controllingUID);
+        [self resetWebKitNetworkingForControllingUID:controllingUID];
+    }
+}
+
++ (void)resetWebKitNetworkMonitoringState {
+    @synchronized(self) {
+        SCWebKitMonitorStates = nil;
     }
 }
 
