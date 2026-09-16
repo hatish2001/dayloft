@@ -47,8 +47,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Deterministic state-machine hooks used by the test target.
 + (BOOL)shouldResetWebKitNetworkingForControllingUID:(uid_t)controllingUID
-                            currentProcessIdentifiers:(NSSet<NSNumber*>*)processIdentifiers
-                                                  now:(NSDate*)now;
+                              safariProcessIdentifiers:(NSSet<NSNumber*>*)safariProcessIdentifiers
+                          networkingProcessIdentifiers:(NSSet<NSNumber*>*)networkingProcessIdentifiers;
 + (void)resetWebKitNetworkMonitoringState;
 
 // Removes block via settings, host file rules and ipfw rules,

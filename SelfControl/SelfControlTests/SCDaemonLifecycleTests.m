@@ -85,30 +85,31 @@ static NSArray* lastStartedBlocklist;
     [super tearDown];
 }
 
-- (void)testLateWebKitNetworkingProcessIsResetOnceAndReplacementIsTrusted {
-    NSDate* now = [NSDate date];
+- (void)testLateSafariNetworkingProcessIsResetOnlyOncePerSafariLaunch {
     XCTAssertTrue([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
-                                                currentProcessIdentifiers:[NSSet setWithObject:@101]
-                                                                      now:now]);
+                                                  safariProcessIdentifiers:[NSSet setWithObject:@10]
+                                              networkingProcessIdentifiers:[NSSet setWithObject:@101]]);
     XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
-                                                 currentProcessIdentifiers:[NSSet setWithObject:@102]
-                                                                       now:[now dateByAddingTimeInterval:1]]);
+                                                   safariProcessIdentifiers:[NSSet setWithObject:@10]
+                                               networkingProcessIdentifiers:[NSSet setWithObject:@102]]);
     XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
-                                                 currentProcessIdentifiers:[NSSet setWithObject:@102]
-                                                                       now:[now dateByAddingTimeInterval:2]]);
+                                                   safariProcessIdentifiers:[NSSet setWithObject:@10]
+                                               networkingProcessIdentifiers:[NSSet setWithObject:@103]]);
     XCTAssertTrue([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
-                                                currentProcessIdentifiers:[NSSet setWithObject:@103]
-                                                                      now:[now dateByAddingTimeInterval:60]]);
+                                                  safariProcessIdentifiers:[NSSet setWithObject:@11]
+                                              networkingProcessIdentifiers:[NSSet setWithObject:@104]]);
 }
 
 - (void)testFirstWebKitProcessAfterIdleBlockStartIsReset {
-    NSDate* now = [NSDate date];
     XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
-                                                 currentProcessIdentifiers:[NSSet set]
-                                                                       now:now]);
+                                                   safariProcessIdentifiers:[NSSet setWithObject:@20]
+                                               networkingProcessIdentifiers:[NSSet set]]);
     XCTAssertTrue([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
-                                                currentProcessIdentifiers:[NSSet setWithObject:@201]
-                                                                      now:[now dateByAddingTimeInterval:60]]);
+                                                  safariProcessIdentifiers:[NSSet setWithObject:@20]
+                                              networkingProcessIdentifiers:[NSSet setWithObject:@201]]);
+    XCTAssertFalse([SCHelperToolUtilities shouldResetWebKitNetworkingForControllingUID:501
+                                                   safariProcessIdentifiers:[NSSet setWithObject:@20]
+                                               networkingProcessIdentifiers:[NSSet setWithObject:@202]]);
 }
 - (void)makeActiveSession {
     SCSettings* s = SCSettings.sharedSettings;

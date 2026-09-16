@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <sys/proc_info.h>
 
-static NSTimeInterval const SCWebKitReplacementWindowSeconds = 10.0;
 static NSMutableDictionary<NSNumber*, NSMutableDictionary*>* SCWebKitMonitorStates;
 
 static NSSet<NSNumber*>* SCProcessIdentifiersNamedForUser(NSString* executableName, uid_t controllingUID) {
@@ -40,14 +39,13 @@ static NSSet<NSNumber*>* SCProcessIdentifiersNamedForUser(NSString* executableNa
     return matches;
 }
 
-static void SCNoteWebKitNetworkingReset(uid_t controllingUID, BOOL expectsReplacement) {
+static void SCNoteWebKitNetworkingReset(uid_t controllingUID, NSSet<NSNumber*>* safariPIDs, BOOL networkingProcessWasReset) {
     if (controllingUID == 0) return;
     @synchronized(SCHelperToolUtilities.class) {
         if (SCWebKitMonitorStates == nil) SCWebKitMonitorStates = [NSMutableDictionary new];
         SCWebKitMonitorStates[@(controllingUID)] = [@{
-            @"trusted": [NSSet set],
-            @"awaitingReplacement": @(expectsReplacement),
-            @"replacementDeadline": [NSDate dateWithTimeIntervalSinceNow:SCWebKitReplacementWindowSeconds]
+            @"safari": safariPIDs ?: [NSSet set],
+            @"resetCompleted": @(networkingProcessWasReset)
         } mutableCopy];
     }
 }
@@ -196,6 +194,7 @@ static uid_t SCActiveControllingUID(SCSettings* settings) {
         return;
     }
 
+    NSSet<NSNumber*>* safariPIDs = SCProcessIdentifiersNamedForUser(@"Safari", controllingUID);
     NSSet<NSNumber*>* networkingPIDs = SCProcessIdentifiersNamedForUser(@"com.apple.WebKit.Networking", controllingUID);
 
     // Safari keeps DNS and established connections in its networking process,
@@ -219,66 +218,55 @@ static uid_t SCActiveControllingUID(SCSettings* settings) {
             NSLog(@"WARNING: Could not reset %@ for user %u: %@", processName, controllingUID, exception);
         }
     }
-    SCNoteWebKitNetworkingReset(controllingUID, networkingPIDs.count > 0);
+    SCNoteWebKitNetworkingReset(controllingUID, safariPIDs, networkingPIDs.count > 0);
 }
 
 + (BOOL)shouldResetWebKitNetworkingForControllingUID:(uid_t)controllingUID
-                            currentProcessIdentifiers:(NSSet<NSNumber*>*)processIdentifiers
-                                                  now:(NSDate*)now {
+                              safariProcessIdentifiers:(NSSet<NSNumber*>*)safariProcessIdentifiers
+                          networkingProcessIdentifiers:(NSSet<NSNumber*>*)networkingProcessIdentifiers {
     if (controllingUID == 0) return NO;
-    NSSet<NSNumber*>* current = [processIdentifiers isKindOfClass:NSSet.class] ? processIdentifiers : [NSSet set];
-    NSDate* observationDate = [now isKindOfClass:NSDate.class] ? now : [NSDate date];
+    NSSet<NSNumber*>* safariPIDs = [safariProcessIdentifiers isKindOfClass:NSSet.class] ? safariProcessIdentifiers : [NSSet set];
+    NSSet<NSNumber*>* networkingPIDs = [networkingProcessIdentifiers isKindOfClass:NSSet.class] ? networkingProcessIdentifiers : [NSSet set];
 
     @synchronized(self) {
         if (SCWebKitMonitorStates == nil) SCWebKitMonitorStates = [NSMutableDictionary new];
         NSMutableDictionary* state = SCWebKitMonitorStates[@(controllingUID)];
         if (state == nil) {
             state = [@{
-                @"trusted": [NSSet set],
-                @"awaitingReplacement": @NO,
-                @"replacementDeadline": NSDate.distantPast
+                @"safari": [NSSet set],
+                @"resetCompleted": @NO
             } mutableCopy];
             SCWebKitMonitorStates[@(controllingUID)] = state;
         }
 
-        BOOL awaitingReplacement = [state[@"awaitingReplacement"] boolValue];
-        NSDate* replacementDeadline = state[@"replacementDeadline"];
-        if (current.count == 0) {
-            state[@"trusted"] = [NSSet set];
-            if (awaitingReplacement && [observationDate compare:replacementDeadline] == NSOrderedDescending) {
-                state[@"awaitingReplacement"] = @NO;
-            }
+        NSSet<NSNumber*>* previousSafariPIDs = [state[@"safari"] isKindOfClass:NSSet.class] ? state[@"safari"] : [NSSet set];
+        if (![safariPIDs isEqualToSet:previousSafariPIDs]) {
+            state[@"safari"] = safariPIDs;
+            state[@"resetCompleted"] = @NO;
+        }
+
+        if (safariPIDs.count == 0 || networkingPIDs.count == 0) {
             return NO;
         }
 
-        if (awaitingReplacement && [observationDate compare:replacementDeadline] != NSOrderedDescending) {
-            // This process was launched because of our reset, so it has never
-            // run without the current hosts rules. Remember it as clean.
-            state[@"trusted"] = current;
-            state[@"awaitingReplacement"] = @NO;
+        if ([state[@"resetCompleted"] boolValue]) {
             return NO;
         }
 
-        state[@"awaitingReplacement"] = @NO;
-        NSSet<NSNumber*>* trusted = [state[@"trusted"] isKindOfClass:NSSet.class] ? state[@"trusted"] : [NSSet set];
-        if (![current isSubsetOfSet:trusted]) {
-            state[@"trusted"] = [NSSet set];
-            state[@"awaitingReplacement"] = @YES;
-            state[@"replacementDeadline"] = [observationDate dateByAddingTimeInterval:SCWebKitReplacementWindowSeconds];
-            return YES;
-        }
-
-        // Forget processes that have exited so a recycled PID cannot inherit trust.
-        state[@"trusted"] = current;
-        return NO;
+        // One reset per Safari application launch is enough. Later WebKit PID
+        // churn belongs to the already-clean Safari session and must not reload
+        // unrelated tabs.
+        state[@"resetCompleted"] = @YES;
+        return YES;
     }
 }
 
 + (void)maintainWebKitNetworkIsolationForControllingUID:(uid_t)controllingUID {
     if (controllingUID == 0) return;
-    NSSet<NSNumber*>* processIdentifiers = SCProcessIdentifiersNamedForUser(@"com.apple.WebKit.Networking", controllingUID);
-    if ([self shouldResetWebKitNetworkingForControllingUID:controllingUID currentProcessIdentifiers:processIdentifiers now:NSDate.date]) {
-        NSLog(@"A new WebKit networking process appeared during an active block; resetting it for user %u", controllingUID);
+    NSSet<NSNumber*>* safariPIDs = SCProcessIdentifiersNamedForUser(@"Safari", controllingUID);
+    NSSet<NSNumber*>* networkingPIDs = SCProcessIdentifiersNamedForUser(@"com.apple.WebKit.Networking", controllingUID);
+    if ([self shouldResetWebKitNetworkingForControllingUID:controllingUID safariProcessIdentifiers:safariPIDs networkingProcessIdentifiers:networkingPIDs]) {
+        NSLog(@"Safari launched during an active block; resetting its first networking process for user %u", controllingUID);
         [self resetWebKitNetworkingForControllingUID:controllingUID];
     }
 }
